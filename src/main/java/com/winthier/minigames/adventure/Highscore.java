@@ -1,11 +1,19 @@
 package com.winthier.minigames.adventure;
 
+import com.avaje.ebean.SqlQuery;
+import com.avaje.ebean.SqlRow;
 import com.avaje.ebean.SqlUpdate;
 import com.winthier.minigames.MinigamesPlugin;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import lombok.Value;
 
 public class Highscore {
+    @Value class Entry{ String name; int score; long time; }
+    List<Entry> list = null;
+
     public void init() {
         System.out.println("Setting up Adventure highscore");
         String sql =
@@ -25,7 +33,6 @@ public class Highscore {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        System.out.println("Done setting up Adventure highscore");
     }
 
     public void store(UUID playerUuid, String playerName, String mapID, Date startTime, Date endTime, int score, boolean finished) {
@@ -48,5 +55,24 @@ public class Highscore {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    List<Entry> list(String mapId)
+    {
+        if (list != null) return list;
+        String sql =
+            "SELECT * from Adventure WHERE map_id = :mapId AND finished = 1 ORDER BY score DESC, start_time ASC LIMIT 10";
+        SqlQuery query = MinigamesPlugin.getInstance().getDatabase().createSqlQuery(sql);
+        query.setParameter("mapId", mapId);
+        List<Entry> result = new ArrayList<>();
+        for (SqlRow row : query.findList()) {
+            String name = row.getString("player_name");
+            int score = row.getInteger("score");
+            Date startTime = row.getDate("start_time");
+            Date endTime = row.getDate("end_time");
+            result.add(new Entry(name, score, endTime.getTime() - startTime.getTime()));
+        }
+        list = result;
+        return result;
     }
 }

@@ -8,7 +8,6 @@ import com.winthier.minigames.util.Msg;
 import com.winthier.minigames.util.Players;
 import com.winthier.minigames.util.Title;
 import com.winthier.minigames.util.WorldLoader;
-import com.winthier.reward.RewardPlugin;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -94,7 +93,7 @@ public class Adventure extends Game implements Listener {
     private Map<Block, EntityType> spawnEntities = new HashMap<>();
     private boolean didSomeoneJoin = false;
     // level config
-    private String mapID = "Test";
+    private String mapId = "Test";
     private String mapPath = "Adventure/Test";
     private boolean debug = false;
     private final List<ItemStack> drops = new ArrayList<>();
@@ -125,7 +124,7 @@ public class Adventure extends Game implements Listener {
     @Override
     public void onEnable() {
         System.out.println(getConfig().getValues(true));
-        mapID = getConfig().getString("MapID", mapID);
+        mapId = getConfig().getString("MapID", mapId);
         mapPath = getConfig().getString("MapPath", mapPath);
         debug = getConfig().getBoolean("Debug", debug);
         solo = getConfig().getBoolean("Solo", solo);
@@ -206,6 +205,17 @@ public class Adventure extends Game implements Listener {
         if (exitItem != null) player.getInventory().setItem(8, exitItem.clone());
         for (ItemStack kitItem : kit) player.getInventory().addItem(kitItem.clone());
         if (!didSomeoneJoin) startTime = new Date();
+        new BukkitRunnable() {
+            @Override public void run() {
+                if (player.isValid()) {
+                    player.sendMessage("");
+                    showHighscore(player);
+                    player.sendMessage("");
+                    showCredits(player);
+                    player.sendMessage("");
+                }
+            }
+        }.runTaskLater(MinigamesPlugin.getInstance(), 20*5);
     }
 
     @Override
@@ -223,6 +233,8 @@ public class Adventure extends Game implements Listener {
         } else if ("item".equals(command)) {
             if (!player.isOp()) return false;
             randomDrop(player.getLocation());
+        } else if (command.equalsIgnoreCase("highscore") || command.equalsIgnoreCase("hi")) {
+            showHighscore(player);
         } else {
             return false;
         }
@@ -248,7 +260,7 @@ public class Adventure extends Game implements Listener {
             winCounters.put(uuid, counter + 1);
             switch (counter) {
             case 20:
-                Title.show(player, "&9Congratulations", String.format("&9You completed the %s adventure", mapID)); // TODO name
+                Title.show(player, "&9Congratulations", String.format("&9You completed the %s adventure", mapId)); // TODO name
                 break;
             case 200: {
                 if (!credits.isEmpty()) {
@@ -596,29 +608,13 @@ public class Adventure extends Game implements Listener {
     }
 
     private void recordPlayerScore(Player player) {
+        if (debug) return;
         if (playersOutOfTheGame.contains(player.getUniqueId())) return;
         playersOutOfTheGame.add(player.getUniqueId());
         player.getInventory().clear();
         final int score = getPlayerScore(player);
         final boolean finished = hasFinished(player.getUniqueId());
-        highscore.store(player.getUniqueId(), player.getName(), mapID, startTime, new Date(), score, finished);
-        // Send rewards
-        if (!debug && score > 0) {
-            Plugin plugin = Bukkit.getServer().getPluginManager().getPlugin("Reward");
-            if (plugin == null || !(plugin instanceof RewardPlugin)) {
-                getLogger().warning("Reward plugin is not installed. Cannot give rewards.");
-                return;
-            }
-            RewardPlugin rp = (RewardPlugin)plugin;
-            int money = finished ? score * 10 : score;
-            rp
-                .createBuilder()
-                .uuid(player.getUniqueId())
-                .name(player.getName())
-                .comment(String.format("You %s the %s adventure and scored %d points. Have %d Kitty Coins.", (finished ? "finished" : "played"), mapID, score, money))
-                .money((double)money)
-                .store();
-        }
+        highscore.store(player.getUniqueId(), player.getName(), mapId, startTime, new Date(), score, finished);
     }
 
     // Event Handlers
@@ -895,5 +891,31 @@ public class Adventure extends Game implements Listener {
                 return;
             }
         }
+    }
+
+    void showHighscore(Player player, List<Highscore.Entry> entries)
+    {
+        int i = 1;
+        Msg.send(player, "&b&l" + mapId + " Highscore");
+        Msg.send(player, "&3Rank &fScore &3Time &fName");
+        for (Highscore.Entry entry : entries) {
+            long seconds = entry.getTime() / 1000;
+            long minutes = seconds / 60;
+            long hours = minutes / 60;
+            Msg.send(player, "&3#%02d &f%d &3%02d&f:&3%02d&f:&3%02d &f%s", i++, entry.getScore(), hours, minutes % 60, seconds % 60, entry.getName());
+        }
+    }
+
+    void showHighscore(Player player)
+    {
+        List<Highscore.Entry> entries = highscore.list(mapId);
+        showHighscore(player, entries);
+    }
+
+    void showCredits(Player player)
+    {
+        StringBuilder sb = new StringBuilder();
+        for (String credit : credits) sb.append(" ").append(credit);
+        Msg.send(player, "&b&l%s&r built by&b%s", mapId, sb.toString());
     }
 }
