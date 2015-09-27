@@ -83,41 +83,41 @@ public class Adventure extends Game implements Listener {
         void call(Block block, Player player);
     }
     // const
-    private final String SIDEBAR_OBJECTIVE = "Sidebar";
+    final String SIDEBAR_OBJECTIVE = "Sidebar";
     // minigame stuf
-    private World world;
-    private BukkitRunnable tickTask;
-    private boolean solo = false;
+    World world;
+    BukkitRunnable tickTask;
+    boolean solo = false;
     // chunk processing
-    private Set<ChunkCoord> processedChunks = new HashSet<>();
-    private Map<Block, EntityType> spawnEntities = new HashMap<>();
-    private boolean didSomeoneJoin = false;
+    Set<ChunkCoord> processedChunks = new HashSet<>();
+    Map<Block, EntityType> spawnEntities = new HashMap<>();
+    boolean didSomeoneJoin = false;
     // level config
-    private String mapId = "Test";
-    private String mapPath = "Adventure/Test";
-    private boolean debug = false;
-    private final List<ItemStack> drops = new ArrayList<>();
-    private final List<String> dropperSkulls = new ArrayList<>();
-    private final List<Material> dropperBlocks = new ArrayList<>();
-    private final List<String> credits = new ArrayList<>();
-    private final List<ItemStack> kit = new ArrayList<>();
-    private ItemStack exitItem;
-    private Location winLocation;
-    private final Map<Block, Trigger> triggers = new HashMap<>();
+    String mapId = "Test";
+    String mapPath = "Adventure/Test";
+    boolean debug = false;
+    final List<ItemStack> drops = new ArrayList<>();
+    final List<String> dropperSkulls = new ArrayList<>();
+    final List<Material> dropperBlocks = new ArrayList<>();
+    final List<String> credits = new ArrayList<>();
+    final List<ItemStack> kit = new ArrayList<>();
+    ItemStack exitItem;
+    Location winLocation;
+    final Map<Block, Trigger> triggers = new HashMap<>();
     Difficulty difficulty = Difficulty.NORMAL;
     // players
-    private final Map<UUID, Integer> scores = new HashMap<>();
-    private final Set<UUID> playersOutOfTheGame = new HashSet<>();
-    private final Map<UUID, Integer> winCounters = new HashMap<>();
-    private final Set<UUID> finished = new HashSet<>();
+    final Map<UUID, Integer> scores = new HashMap<>();
+    final Set<UUID> playersOutOfTheGame = new HashSet<>();
+    final Map<UUID, Integer> winCounters = new HashMap<>();
+    final Set<UUID> finished = new HashSet<>();
     // score keeping
-    private Scoreboard scoreboard;
-    private final Highscore highscore = new Highscore();
-    private Date startTime;
+    Scoreboard scoreboard;
+    final Highscore highscore = new Highscore();
+    Date startTime;
     // state
-    private final Random random = new Random(System.currentTimeMillis());
-    private long ticks;
-    private long emptyTicks;
+    final Random random = new Random(System.currentTimeMillis());
+    long ticks;
+    long emptyTicks;
     
     // Setup event handlers
     
@@ -144,7 +144,7 @@ public class Adventure extends Game implements Listener {
         spawnEntities.clear();
     }
 
-    private void onWorldsLoaded(WorldLoader worldLoader) {
+    void onWorldsLoaded(WorldLoader worldLoader) {
         this.world = worldLoader.getWorld(0);
         world.setDifficulty(difficulty);
         world.setPVP(false);
@@ -165,7 +165,7 @@ public class Adventure extends Game implements Listener {
         ready();
     }
 
-    private void onTick() {
+    void onTick() {
         final long ticks = this.ticks++;
         if (getPlayerUuids().isEmpty()) {
             cancel();
@@ -248,7 +248,7 @@ public class Adventure extends Game implements Listener {
         return super.joinPlayers(uuids);
     }
 
-    private void processWinners() {
+    void processWinners() {
         final List<UUID> removePlayers = new ArrayList<>();
         for (UUID uuid : winCounters.keySet()) {
             final Player player = Bukkit.getServer().getPlayer(uuid);
@@ -281,18 +281,18 @@ public class Adventure extends Game implements Listener {
         removePlayers.clear();
     }
 
-    private void processPlayerChunks() {
+    void processPlayerChunks() {
         for (Player player : getOnlinePlayers()) {
             Chunk chunk = player.getLocation().getChunk();
             processChunkArea(chunk.getX(), chunk.getZ());
         }
     }
 
-    private void processChunkArea(Chunk chunk) {
+    void processChunkArea(Chunk chunk) {
         processChunkArea(chunk.getX(), chunk.getZ());
     }
     
-    private void processChunkArea(int cx, int cz) {
+    void processChunkArea(int cx, int cz) {
         final int RADIUS = 4;
         for (int dx = -RADIUS; dx <= RADIUS; ++dx) {
             for (int dz = -RADIUS; dz <= RADIUS; ++dz) {
@@ -303,7 +303,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private void processChunk(int x, int z) {
+    void processChunk(int x, int z) {
         final ChunkCoord cc = new ChunkCoord(x, z);
         if (processedChunks.contains(cc)) return;
         processedChunks.add(cc);
@@ -325,7 +325,7 @@ public class Adventure extends Game implements Listener {
                 //     entityType = EntityType.ZOMBIE;
                 //     break;
                 // }
-                if (skull.hasOwner()) {
+                if (skull.hasOwner() && skull.getOwner() != null) {
                     String owner = skull.getOwner();
                     if (owner.equals("MHF_Creeper")) entityType = EntityType.CREEPER;
                     if (owner.equals("MHF_Skeleton")) entityType = EntityType.SKELETON;
@@ -354,7 +354,8 @@ public class Adventure extends Game implements Listener {
                 }
             } else if (state instanceof Chest) {
                 final Inventory inv = ((Chest)state).getInventory();
-                if ("[DROPPERS]".equals(inv.getName())) {
+                String name = inv.getName().toLowerCase();
+                if ("[droppers]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             if (item.getType() == Material.SKULL_ITEM) {
@@ -370,7 +371,7 @@ public class Adventure extends Game implements Listener {
                     }
                     inv.clear();
                     state.getBlock().setType(Material.AIR);
-                } else if ("[DROPS]".equals(inv.getName())) {
+                } else if ("[drops]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             drops.add(item.clone());
@@ -378,7 +379,7 @@ public class Adventure extends Game implements Listener {
                     }
                     inv.clear();
                     state.getBlock().setType(Material.AIR);
-                } else if ("[KIT]".equals(inv.getName())) {
+                } else if ("[kit]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             kit.add(item.clone());
@@ -386,7 +387,7 @@ public class Adventure extends Game implements Listener {
                     }
                     inv.clear();
                     state.getBlock().setType(Material.AIR);
-                } else if ("[EXIT]".equals(inv.getName())) {
+                } else if ("[exit]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             this.exitItem = item.clone();
@@ -394,7 +395,7 @@ public class Adventure extends Game implements Listener {
                     }
                     inv.clear();
                     state.getBlock().setType(Material.AIR);
-                } else if ("[WIN]".equals(inv.getName())) {
+                } else if ("[win]".equals(name)) {
                     this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
                     state.getBlock().setType(Material.AIR);
                 }
@@ -477,7 +478,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private boolean isNearAnyPlayer(Block block) {
+    boolean isNearAnyPlayer(Block block) {
         final int RADIUS = 16;
         final int VRADIUS = 8;
         for (Player player : getOnlinePlayers()) {
@@ -499,7 +500,7 @@ public class Adventure extends Game implements Listener {
         return false;
     }
 
-    private void processSpawnEntities() {
+    void processSpawnEntities() {
         final List<Block> removeBlocks = new ArrayList<>();
         for (Block block : spawnEntities.keySet()) {
             if (!isNearAnyPlayer(block)) continue;
@@ -512,19 +513,19 @@ public class Adventure extends Game implements Listener {
         removeBlocks.clear();
     }
 
-    private ItemStack randomDrop() {
+    ItemStack randomDrop() {
         if (drops.isEmpty()) return null;
         return drops.get(random.nextInt(drops.size())).clone();
     }
 
-    private void randomDrop(Location loc) {
+    void randomDrop(Location loc) {
         final ItemStack stack = randomDrop();
         if (stack == null) return;
         final Item item = loc.getWorld().dropItem(loc, stack);
         item.setPickupDelay(0);
     }
 
-    private boolean isDropper(Block block)
+    boolean isDropper(Block block)
     {
         if (block.getType() == Material.SKULL) {
             BlockState state = block.getState();
@@ -540,7 +541,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private boolean isDroppedItem(ItemStack item)
+    boolean isDroppedItem(ItemStack item)
     {
         for (ItemStack drop : drops) {
             if (drop.isSimilar(item)) return true;
@@ -548,30 +549,30 @@ public class Adventure extends Game implements Listener {
         return false;
     }
 
-    private void setupScoreboard() {
+    void setupScoreboard() {
         scoreboard = MinigamesPlugin.getInstance().getServer().getScoreboardManager().getNewScoreboard();
         Objective objective = scoreboard.registerNewObjective(SIDEBAR_OBJECTIVE, "dummy");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         objective.setDisplayName(Msg.format("&9Score"));
     }
 
-    private int getPlayerScore(Player player) {
+    int getPlayerScore(Player player) {
         return getPlayerScore(player.getUniqueId());
     }
 
-    private int getPlayerScore(UUID uuid) {
+    int getPlayerScore(UUID uuid) {
         Integer score = scores.get(uuid);
         if (score == null) return 0;
         return score;
     }
 
-    private void setPlayerScore(Player player, int score) {
+    void setPlayerScore(Player player, int score) {
         if (setPlayerScore(player.getUniqueId(), score)) {
             scoreboard.getObjective(SIDEBAR_OBJECTIVE).getScore(player.getName()).setScore(score);
         }
     }
 
-    private boolean setPlayerScore(UUID uuid, int score) {
+    boolean setPlayerScore(UUID uuid, int score) {
         Integer oldScore = scores.get(uuid);
         if (oldScore == null || oldScore != score) {
             scores.put(uuid, score);
@@ -581,7 +582,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private int countPlayerScore(Player player) {
+    int countPlayerScore(Player player) {
         int result = 0;
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null) continue;
@@ -591,7 +592,7 @@ public class Adventure extends Game implements Listener {
         return result;
     }
 
-    private void countPlayerScores() {
+    void countPlayerScores() {
         for (Player player : getOnlinePlayers()) {
             if (playersOutOfTheGame.contains(player.getUniqueId())) continue;
             int score = countPlayerScore(player);
@@ -599,15 +600,15 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private boolean hasFinished(UUID uuid) {
+    boolean hasFinished(UUID uuid) {
         return finished.contains(uuid);
     }
 
-    private void setFinished(UUID uuid) {
+    void setFinished(UUID uuid) {
         finished.add(uuid);
     }
 
-    private void recordPlayerScore(Player player) {
+    void recordPlayerScore(Player player) {
         if (debug) return;
         if (playersOutOfTheGame.contains(player.getUniqueId())) return;
         playersOutOfTheGame.add(player.getUniqueId());
@@ -838,7 +839,7 @@ public class Adventure extends Game implements Listener {
         }
     }
     
-    private void checkPortalBlock(final Block block, Set<Block> blocks, Set<Block> checked) {
+    void checkPortalBlock(final Block block, Set<Block> blocks, Set<Block> checked) {
         if (checked.contains(block)) return;
         checked.add(block);
         Material type = block.getType();
@@ -853,7 +854,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    private Set<Block> getPortalNear(final Block block) {
+    Set<Block> getPortalNear(final Block block) {
         Set<Block> blocks = new HashSet<Block>();
         Set<Block> checked = new HashSet<Block>();
         if (block.getType() == Material.PORTAL) checkPortalBlock(block, blocks, checked);
