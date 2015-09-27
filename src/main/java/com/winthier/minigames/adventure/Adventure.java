@@ -12,6 +12,7 @@ import com.winthier.minigames.util.WorldLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,11 +36,13 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.Skull;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -51,6 +54,7 @@ import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPortalEvent;
@@ -136,6 +140,7 @@ public class Adventure extends Game implements Listener {
     Location winLocation;
     final Map<Block, Trigger> triggers = new HashMap<>();
     Difficulty difficulty = Difficulty.NORMAL;
+    final Set<EntityType> lockedEntities = EnumSet.noneOf(EntityType.class);
     // players
     final Map<UUID, Integer> scores = new HashMap<>();
     final Set<UUID> playersOutOfTheGame = new HashSet<>();
@@ -474,6 +479,19 @@ public class Adventure extends Game implements Listener {
                             world.setThundering(true);
                         }
                         world.setWeatherDuration(duration * 20);
+                    } else if ("[options]".equals(firstLine)) {
+                        for (int i = 1; i < 4; ++i) {
+                            String line = sign.getLine(i);
+                            if ("LockArmorStands".equalsIgnoreCase(line)) {
+                                lockedEntities.add(EntityType.ARMOR_STAND);
+                            } else if ("LockItemFrames".equalsIgnoreCase(line)) {
+                                lockedEntities.add(EntityType.ITEM_FRAME);
+                            } else if ("NoFireTick".equalsIgnoreCase(line)) {
+                                world.setGameRuleValue("doFireTick", "false");
+                            } else if ("NoMobGriefing".equalsIgnoreCase(line)) {
+                                world.setGameRuleValue("mobGriefing", "false");
+                            }
+                        }
                     } else if (firstLine.equals("[win]")) {
                         this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
                     } else if (firstLine.equals("[credits]")) {
@@ -864,6 +882,12 @@ public class Adventure extends Game implements Listener {
         }
     }
 
+    void onClickEntity(Player player, Entity e, Cancellable event)
+    {
+        if (lockedEntities.contains(e.getType())) {
+            event.setCancelled(true);
+        }
+    }
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
@@ -872,7 +896,9 @@ public class Adventure extends Game implements Listener {
         if (item.isSimilar(this.exitItem)) {
             event.setCancelled(true);
             MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+            return;
         }
+        onClickEntity(player, event.getRightClicked(), event);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -882,9 +908,19 @@ public class Adventure extends Game implements Listener {
         if (item.isSimilar(this.exitItem)) {
             event.setCancelled(true);
             MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+            return;
         }
+        onClickEntity(player, event.getRightClicked(), event);
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event)
+    {
+        if (event.getDamager() instanceof Player) {
+            onClickEntity((Player)event.getDamager(), event.getEntity(), event);
+        }
+    }
+    
     @EventHandler(ignoreCancelled = true)
     public void onPlayerLeave(PlayerLeaveEvent event) {
         final Player player = event.getPlayer();
