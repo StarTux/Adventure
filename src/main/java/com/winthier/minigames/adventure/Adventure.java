@@ -485,6 +485,8 @@ public class Adventure extends Game implements Listener {
                                 lockedEntities.add(EntityType.ARMOR_STAND);
                             } else if ("LockItemFrames".equalsIgnoreCase(line)) {
                                 lockedEntities.add(EntityType.ITEM_FRAME);
+                            } else if ("LockPaintings".equalsIgnoreCase(line)) {
+                                lockedEntities.add(EntityType.PAINTING);
                             } else if ("NoFireTick".equalsIgnoreCase(line)) {
                                 world.setGameRuleValue("doFireTick", "false");
                             } else if ("NoMobGriefing".equalsIgnoreCase(line)) {
