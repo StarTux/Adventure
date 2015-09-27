@@ -76,6 +76,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.util.Vector;
 
 public class Adventure extends Game implements Listener {
     @Value static class ChunkCoord { int x, z; };
@@ -96,6 +97,9 @@ public class Adventure extends Game implements Listener {
     String mapId = "Test";
     String mapPath = "Adventure/Test";
     boolean debug = false;
+    final List<Location> spawns = new ArrayList<>();
+    Location lookAt = null;
+    int spawnIter = 0;
     final List<ItemStack> drops = new ArrayList<>();
     final List<String> dropperSkulls = new ArrayList<>();
     final List<Material> dropperBlocks = new ArrayList<>();
@@ -221,7 +225,18 @@ public class Adventure extends Game implements Listener {
     @Override
     public Location getSpawnLocation(Player player)
     {
-        return world.getSpawnLocation();
+        Location spawn;
+        if (spawns.isEmpty()) {
+            spawn = world.getSpawnLocation();
+        } else {
+            if (spawnIter >= spawns.size()) spawnIter = 0;
+            spawn = spawns.get(spawnIter++);
+        }
+        if (lookAt != null) {
+            Vector vec = lookAt.toVector().subtract(spawn.toVector());
+            spawn = spawn.setDirection(vec);
+        }
+        return spawn;
     }
 
     @Override
@@ -355,6 +370,7 @@ public class Adventure extends Game implements Listener {
             } else if (state instanceof Chest) {
                 final Inventory inv = ((Chest)state).getInventory();
                 String name = inv.getName().toLowerCase();
+                boolean removeThis = true;
                 if ("[droppers]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
@@ -370,7 +386,6 @@ public class Adventure extends Game implements Listener {
                         }
                     }
                     inv.clear();
-                    state.getBlock().setType(Material.AIR);
                 } else if ("[drops]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
@@ -378,7 +393,6 @@ public class Adventure extends Game implements Listener {
                         }
                     }
                     inv.clear();
-                    state.getBlock().setType(Material.AIR);
                 } else if ("[kit]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
@@ -386,7 +400,6 @@ public class Adventure extends Game implements Listener {
                         }
                     }
                     inv.clear();
-                    state.getBlock().setType(Material.AIR);
                 } else if ("[exit]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
@@ -394,24 +407,28 @@ public class Adventure extends Game implements Listener {
                         }
                     }
                     inv.clear();
-                    state.getBlock().setType(Material.AIR);
                 } else if ("[win]".equals(name)) {
                     this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
-                    state.getBlock().setType(Material.AIR);
+                } else {
+                    removeThis = false;
                 }
+                if (removeThis) state.getBlock().setType(Material.AIR);
             } else if (state instanceof Sign) {
                 final Sign sign = (Sign)state;
                 String firstLine = sign.getLine(0).toLowerCase();
+                boolean removeThis = true;
                 if (firstLine != null && firstLine.startsWith("[") && firstLine.endsWith("]")) {
-                    if (firstLine.equals("[win]")) {
+                    if ("[spawn]".equals(firstLine)) {
+                        spawns.add(state.getLocation().add(0.5, 0.0, 0.5));
+                    } else if ("[lookat]".equals(firstLine)) {
+                        this.lookAt = state.getLocation().add(0.5, 0.0, 0.5);
+                    } else if (firstLine.equals("[win]")) {
                         this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
-                        state.getBlock().setType(Material.AIR);
                     } else if (firstLine.equals("[credits]")) {
                         for (int i = 1; i < 4; ++i) {
                             String credit = sign.getLine(i);
                             if (credit != null) credits.add(credit);
                         }
-                        state.getBlock().setType(Material.AIR);
                     } else if (firstLine.equals("[finish]")) {
                         triggers.put(state.getBlock(), new Trigger() {
                             @Override public void call(Block block, Player player) {
@@ -420,9 +437,9 @@ public class Adventure extends Game implements Listener {
                                 if (winLocation != null) player.teleport(winLocation);
                                 winCounters.put(player.getUniqueId(), 0);
                                 player.getInventory().setItem(8, exitItem.clone());
+                                player.getInventory().clear();
                             }
                         });
-                        state.getBlock().setType(Material.AIR);
                     } else if (firstLine.equals("[teleport]")) {
                         String[] tokens = sign.getLine(1).split(" ");
                         if (tokens.length == 3) {
@@ -460,7 +477,6 @@ public class Adventure extends Game implements Listener {
                         } else {
                             getLogger().warning(String.format("Bad teleport sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
-                        state.getBlock().setType(Material.AIR);
                     } else if (firstLine.equals("[difficulty]")) {
                         try {
                             this.difficulty = Difficulty.valueOf(sign.getLine(1).toUpperCase());
@@ -469,10 +485,11 @@ public class Adventure extends Game implements Listener {
                         } catch (IllegalArgumentException iae) {
                             getLogger().warning(String.format("Bad difficulty sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
-                        state.getBlock().setType(Material.AIR);
                     } else {
                         getLogger().warning("Unrecognized sign: " + firstLine);
+                        removeThis = false;
                     }
+                    if (removeThis) state.getBlock().setType(Material.AIR);
                 }
             }
         }
