@@ -590,6 +590,7 @@ public class Adventure extends Game implements Listener {
             }
             if (spawnedMob != null) {
                 spawnedMob.setRemoveWhenFarAway(false);
+                spawnedMob.setCanPickupItems(false);
                 getLogger().info("Mob spawned: " + spawnedMob.getType() + " " + spawnMob.getId() + " " + spawnMob.getTagData());
                 spawnedMob = null;
                 removeBlocks.add(block);
