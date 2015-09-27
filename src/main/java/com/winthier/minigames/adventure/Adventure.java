@@ -761,11 +761,6 @@ public class Adventure extends Game implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onHangingBreak(HangingBreakEvent event) {
-        event.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
         final List<Block> addBlocks = new ArrayList<>();
         event.setYield(0.0f);
@@ -821,12 +816,6 @@ public class Adventure extends Game implements Listener {
             event.setCancelled(true);
         }
     }
-
-    // @EventHandler(ignoreCancelled = true)
-    // public void onFoodLevelChange(FoodLevelChangeEvent event)
-    // {
-    //     event.setCancelled(true);
-    // }
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
