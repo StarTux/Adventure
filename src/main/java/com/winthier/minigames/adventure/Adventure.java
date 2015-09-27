@@ -46,12 +46,10 @@ import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -238,6 +236,7 @@ public class Adventure extends Game implements Listener {
         didSomeoneJoin = this.didSomeoneJoin;
         this.didSomeoneJoin = true;
         Players.reset(player);
+        player.setGameMode(GameMode.ADVENTURE);
         player.setScoreboard(scoreboard);
         if (exitItem != null) player.getInventory().setItem(8, exitItem.clone());
         for (ItemStack kitItem : kit) player.getInventory().addItem(kitItem.clone());
@@ -728,21 +727,16 @@ public class Adventure extends Game implements Listener {
     // Event Handlers
 
     @EventHandler(ignoreCancelled = true)
-    public void onBlockPlace(BlockPlaceEvent event) {
-        event.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onBlockBreak(BlockBreakEvent event) {
-        event.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onBlockDamage(BlockDamageEvent event) {
-        if (isDropper(event.getBlock())) {
-            event.setCancelled(true);
-            randomDrop(event.getBlock().getLocation().add(0.5, 0.0, 0.50));
-            event.getBlock().setType(Material.AIR);
+    public void onPlayerInteract2(PlayerInteractEvent event) {
+        switch (event.getAction()) {
+        case LEFT_CLICK_BLOCK:
+        case RIGHT_CLICK_BLOCK:
+            Block block = event.getClickedBlock();
+            if (isDropper(block)) {
+                event.setCancelled(true);
+                randomDrop(block.getLocation().add(0.5, 0.0, 0.50));
+                block.setType(Material.AIR);
+            }
         }
     }
     
