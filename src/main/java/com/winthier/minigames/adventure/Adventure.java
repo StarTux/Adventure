@@ -10,6 +10,7 @@ import com.winthier.minigames.util.Players;
 import com.winthier.minigames.util.Title;
 import com.winthier.minigames.util.WorldLoader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -85,6 +86,30 @@ public class Adventure extends Game implements Listener {
     static interface Trigger { void call(Block block, Player player); }
     // const
     final String SIDEBAR_OBJECTIVE = "Sidebar";
+    final List<String> mobList = Arrays.asList(
+        "MHF_Blaze",
+        "MHF_CaveSpider",
+        "MHF_Chicken",
+        "MHF_Cow",
+        "MHF_Creeper",
+        "MHF_Enderman",
+        "MHF_Ghast",
+        "MHF_Golem",
+        "MHF_LavaSlime",
+        "MHF_MushroomCow",
+        "MHF_Ocelot",
+        "MHF_Pig",
+        "MHF_PigZombie",
+        "MHF_Sheep",
+        "MHF_Skeleton",
+        "MHF_Slime",
+        "MHF_Spider",
+        "MHF_Squid",
+        "MHF_Steve",
+        "MHF_Villager",
+        "MHF_WSkeleton",
+        "MHF_Zombie"
+        );
     // minigame stuf
     World world;
     BukkitRunnable tickTask;
@@ -339,7 +364,7 @@ public class Adventure extends Game implements Listener {
                         spawnMob = new SpawnMob("Skeleton", "{SkeletonType:1,Equipment:[{id:stone_sword},{},{},{},{}]}");
                     } else if ("MHF_Golem".equals(owner)) {
                         spawnMob = new SpawnMob("VillagerGolem", "{}");
-                    } else if (owner.startsWith("MHF_")) {
+                    } else if (mobList.contains(owner)) {
                         spawnMob = new SpawnMob(owner.substring(4), "{}");
                     }
                 }
@@ -524,7 +549,6 @@ public class Adventure extends Game implements Listener {
             } else {
                 getLogger().warning("Mob did not spawn: " + spawnMob.getId() + " " + spawnMob.getTagData());
             }
-            // LivingEntity entity = (LivingEntity)world.spawnEntity(block.getLocation().add(0.5, 0.0, 0.5), entityType);
         }
         for (Block block : removeBlocks) spawnMobs.remove(block);
         removeBlocks.clear();
