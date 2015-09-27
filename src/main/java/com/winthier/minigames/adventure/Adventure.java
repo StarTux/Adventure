@@ -905,7 +905,15 @@ public class Adventure extends Game implements Listener {
             onClickEntity((Player)event.getDamager(), event.getEntity(), event);
         }
     }
-    
+
+    @EventHandler(ignoreCancelled = true)
+    public void onHangingBreak(HangingBreakEvent event)
+    {
+        if (lockedEntities.contains(event.getEntity().getType())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(ignoreCancelled = true)
     public void onPlayerLeave(PlayerLeaveEvent event) {
         final Player player = event.getPlayer();
