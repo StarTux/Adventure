@@ -182,6 +182,12 @@ public class Adventure extends Game implements Listener {
         world.setGameRuleValue("doTileDrops", "false");
         world.setGameRuleValue("doMobLoot", "false");
         world.setGameRuleValue("doDaylightCycle", "false");
+        if (ticks % 20L == 0L) {
+            world.setTime(1000);
+            world.setStorm(false);
+            world.setThundering(false);
+            world.setWeatherDuration(99999);
+        }
         this.tickTask = new BukkitRunnable() {
             @Override public void run() {
                 onTick();
@@ -215,11 +221,6 @@ public class Adventure extends Game implements Listener {
             } else {
                 emptyTicks = 0L;
             }
-        }
-        if (ticks % 20L == 0L) {
-            world.setTime(18000);
-            world.setStorm(true);
-            world.setThundering(false);
         }
         processPlayerChunks();
         processSpawnMobs();
@@ -427,6 +428,52 @@ public class Adventure extends Game implements Listener {
                         spawns.add(state.getLocation().add(0.5, 0.0, 0.5));
                     } else if ("[lookat]".equals(firstLine)) {
                         this.lookAt = state.getLocation().add(0.5, 0.0, 0.5);
+                    } else if ("[time]".equals(firstLine)) {
+                        long time = 0;
+                        String arg = sign.getLine(1).toLowerCase();
+                        if ("day".equals(arg)) {
+                            time = 1000;
+                        } else if ("night".equals(arg)) {
+                            time = 13000;
+                        } else if ("noon".equals(arg)) {
+                            time = 6000;
+                        } else if ("midnight".equals(arg)) {
+                            time = 18000;
+                        } else {
+                            try {
+                                time = Long.parseLong(sign.getLine(1));
+                            } catch (NumberFormatException nfe) {}
+                        }
+                        world.setTime(time);
+                        if ("lock".equalsIgnoreCase(sign.getLine(2))) {
+                            world.setGameRuleValue("doDaylightCycle", "false");
+                        } else {
+                            world.setGameRuleValue("doDaylightCycle", "true");
+                        }
+                    } else if ("[weather]".equals(firstLine)) {
+                        int duration = 60;
+                        if (!sign.getLine(2).isEmpty()) {
+                            String arg = sign.getLine(2).toLowerCase();
+                            if ("lock".equals(arg)) {
+                                duration = 99999;
+                            } else {
+                                try {
+                                    duration = Integer.parseInt(sign.getLine(2));
+                                } catch (NumberFormatException nfe) {}
+                            }
+                        }
+                        String weather = sign.getLine(1).toLowerCase();
+                        if ("clear".equals(weather)) {
+                            world.setStorm(false);
+                            world.setThundering(false);
+                        } else if ("rain".equals(weather)) {
+                            world.setStorm(true);
+                            world.setThundering(false);
+                        } else if ("thunder".equals(weather)) {
+                            world.setStorm(true);
+                            world.setThundering(true);
+                        }
+                        world.setWeatherDuration(duration * 20);
                     } else if (firstLine.equals("[win]")) {
                         this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
                     } else if (firstLine.equals("[credits]")) {
