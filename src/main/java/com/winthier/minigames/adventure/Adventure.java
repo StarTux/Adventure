@@ -4,6 +4,7 @@ import com.winthier.minigames.MinigamesPlugin;
 import com.winthier.minigames.event.player.PlayerLeaveEvent;
 import com.winthier.minigames.game.Game;
 import com.winthier.minigames.util.BukkitFuture;
+import com.winthier.minigames.util.Console;
 import com.winthier.minigames.util.Msg;
 import com.winthier.minigames.util.Players;
 import com.winthier.minigames.util.Title;
@@ -79,10 +80,9 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.Vector;
 
 public class Adventure extends Game implements Listener {
-    @Value static class ChunkCoord { int x, z; };
-    static interface Trigger {
-        void call(Block block, Player player);
-    }
+    @Value static class ChunkCoord { int x, z; }
+    @Value static class SpawnMob { String id; String tagData; }
+    static interface Trigger { void call(Block block, Player player); }
     // const
     final String SIDEBAR_OBJECTIVE = "Sidebar";
     // minigame stuf
@@ -91,7 +91,9 @@ public class Adventure extends Game implements Listener {
     boolean solo = false;
     // chunk processing
     Set<ChunkCoord> processedChunks = new HashSet<>();
-    Map<Block, EntityType> spawnEntities = new HashMap<>();
+    Map<Block, SpawnMob> spawnMobs = new HashMap<>();
+    boolean expectMob = false;
+    LivingEntity spawnedMob = null;
     boolean didSomeoneJoin = false;
     // level config
     String mapId = "Test";
@@ -145,7 +147,7 @@ public class Adventure extends Game implements Listener {
             tickTask = null;
         }
         processedChunks.clear();
-        spawnEntities.clear();
+        spawnMobs.clear();
     }
 
     void onWorldsLoaded(WorldLoader worldLoader) {
@@ -195,7 +197,7 @@ public class Adventure extends Game implements Listener {
             world.setThundering(false);
         }
         processPlayerChunks();
-        processSpawnEntities();
+        processSpawnMobs();
         processWinners();
         countPlayerScores();
     }
@@ -327,44 +329,22 @@ public class Adventure extends Game implements Listener {
         chunk.load();
         for (BlockState state : chunk.getTileEntities()) {
             if (state instanceof Skull) {
-                EntityType entityType = null;
+                SpawnMob spawnMob = null;
                 final Skull skull = (Skull)state;
-                // switch (skull.getSkullType()) {
-                // case CREEPER:
-                //     entityType = EntityType.CREEPER;
-                //     break;
-                // case SKELETON:
-                //     entityType = EntityType.SKELETON;
-                //     break;
-                // case ZOMBIE:
-                //     entityType = EntityType.ZOMBIE;
-                //     break;
-                // }
                 if (skull.hasOwner() && skull.getOwner() != null) {
                     String owner = skull.getOwner();
-                    if (owner.equals("MHF_Creeper")) entityType = EntityType.CREEPER;
-                    if (owner.equals("MHF_Skeleton")) entityType = EntityType.SKELETON;
-                    if (owner.equals("MHF_Zombie")) entityType = EntityType.ZOMBIE;
-                    if (owner.equals("MHF_Spider")) entityType = EntityType.SPIDER;
-                    if (owner.equals("MHF_CaveSpider")) entityType = EntityType.CAVE_SPIDER;
-                    if (owner.equals("MHF_Blaze")) entityType = EntityType.BLAZE;
-                    if (owner.equals("MHF_Enderman")) entityType = EntityType.ENDERMAN;
-                    if (owner.equals("MHF_Ghast")) entityType = EntityType.GHAST;
-                    if (owner.equals("MHF_Golem")) entityType = EntityType.BLAZE;
-                    if (owner.equals("MHF_LavaSlime")) entityType = EntityType.MAGMA_CUBE;
-                    if (owner.equals("MHF_PigZombie")) entityType = EntityType.PIG_ZOMBIE;
-                    if (owner.equals("MHF_Slime")) entityType = EntityType.SLIME;
-                    if (owner.equals("MHF_WSkeleton")) entityType = EntityType.SKELETON; // TODO
-                    if (owner.equals("MHF_Wither")) entityType = EntityType.WITHER;
-                    // Non-hostile
-                    if (owner.equals("MHF_Cow")) entityType = EntityType.COW;
-                    if (owner.equals("MHF_Chicken")) entityType = EntityType.CHICKEN;
-                    if (owner.equals("MHF_Sheep")) entityType = EntityType.SHEEP;
-                    if (owner.equals("MHF_Squid")) entityType = EntityType.SQUID;
-                    if (owner.equals("MHF_Pig")) entityType = EntityType.PIG;
+                    if ("MHF_Skeleton".equals(owner)) {
+                        spawnMob = new SpawnMob("Skeleton", "{SkeletonType:0,Equipment:[{id:bow},{},{},{},{}]}");
+                    } else if ("MHF_WSkeleton".equals(owner)) {
+                        spawnMob = new SpawnMob("Skeleton", "{SkeletonType:1,Equipment:[{id:stone_sword},{},{},{},{}]}");
+                    } else if ("MHF_Golem".equals(owner)) {
+                        spawnMob = new SpawnMob("VillagerGolem", "{}");
+                    } else if (owner.startsWith("MHF_")) {
+                        spawnMob = new SpawnMob(owner.substring(4), "{}");
+                    }
                 }
-                if (entityType != null) {
-                    spawnEntities.put(state.getBlock(), entityType);
+                if (spawnMob != null) {
+                    spawnMobs.put(state.getBlock(), spawnMob);
                     state.getBlock().setType(Material.AIR);
                 }
             } else if (state instanceof Chest) {
@@ -495,7 +475,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    boolean isNearAnyPlayer(Block block) {
+    Player isNearAnyPlayer(Block block) {
         final int RADIUS = 16;
         final int VRADIUS = 8;
         for (Player player : getOnlinePlayers()) {
@@ -512,21 +492,41 @@ public class Adventure extends Game implements Listener {
             if (dy > VRADIUS) continue;
             final int dz = Math.abs(pz - block.getZ());
             if (dz > RADIUS) continue;
-            return true;
+            return player;
         }
-        return false;
+        return null;
     }
 
-    void processSpawnEntities() {
+    void processSpawnMobs() {
         final List<Block> removeBlocks = new ArrayList<>();
-        for (Block block : spawnEntities.keySet()) {
-            if (!isNearAnyPlayer(block)) continue;
-            removeBlocks.add(block);
-            final EntityType entityType = spawnEntities.get(block);
-            LivingEntity entity = (LivingEntity)world.spawnEntity(block.getLocation().add(0.5, 0.0, 0.5), entityType);
-            entity.setRemoveWhenFarAway(false);
+        for (Block block : spawnMobs.keySet()) {
+            Player player = isNearAnyPlayer(block);
+            if (player == null) continue;
+            final SpawnMob spawnMob = spawnMobs.get(block);
+            String command = String.format("minecraft:execute %s ~ ~ ~ summon %s %d %d %d %s",
+                                           player.getUniqueId(),
+                                           spawnMob.getId(),
+                                           block.getX(), block.getY(), block.getZ(),
+                                           spawnMob.getTagData() != null ? spawnMob.getTagData() : "");
+            expectMob = true;
+            try {
+                Console.command(command);
+            } catch (Exception e) {
+                e.printStackTrace();
+                expectMob = false;
+                continue;
+            }
+            if (spawnedMob != null) {
+                spawnedMob.setRemoveWhenFarAway(false);
+                getLogger().info("Mob spawned: " + spawnedMob.getType() + " " + spawnMob.getId() + " " + spawnMob.getTagData());
+                spawnedMob = null;
+                removeBlocks.add(block);
+            } else {
+                getLogger().warning("Mob did not spawn: " + spawnMob.getId() + " " + spawnMob.getTagData());
+            }
+            // LivingEntity entity = (LivingEntity)world.spawnEntity(block.getLocation().add(0.5, 0.0, 0.5), entityType);
         }
-        for (Block block : removeBlocks) spawnEntities.remove(block);
+        for (Block block : removeBlocks) spawnMobs.remove(block);
         removeBlocks.clear();
     }
 
@@ -823,10 +823,15 @@ public class Adventure extends Game implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM) {
-            return;
+        if (expectMob) {
+            spawnedMob = (LivingEntity)event.getEntity();
+            expectMob = false;
+        } else {
+            if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM) {
+                return;
+            }
+            event.setCancelled(true);
         }
-        event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
