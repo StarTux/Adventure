@@ -94,6 +94,7 @@ public class Adventure extends Game implements Listener {
         "MHF_Chicken",
         "MHF_Cow",
         "MHF_Creeper",
+        "MHF_EnderDragon",
         "MHF_Enderman",
         "MHF_Ghast",
         "MHF_Golem",
