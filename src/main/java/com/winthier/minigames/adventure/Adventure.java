@@ -187,7 +187,7 @@ public class Adventure extends Game implements Listener {
         world.setGameRuleValue("doMobLoot", "false");
         world.setGameRuleValue("doDaylightCycle", "false");
         if (ticks % 20L == 0L) {
-            world.setTime(1000);
+            world.setTime(18000);
             world.setStorm(false);
             world.setThundering(false);
             world.setWeatherDuration(99999);
