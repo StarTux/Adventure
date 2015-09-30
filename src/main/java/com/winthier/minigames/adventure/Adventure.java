@@ -371,6 +371,8 @@ public class Adventure extends Game implements Listener {
                         spawnMob = new SpawnMob("Skeleton", "{SkeletonType:0,Equipment:[{id:bow},{},{},{},{}]}");
                     } else if ("MHF_WSkeleton".equals(owner)) {
                         spawnMob = new SpawnMob("Skeleton", "{SkeletonType:1,Equipment:[{id:stone_sword},{},{},{},{}]}");
+                    } else if ("MHF_PigZombie".equals(owner)) {
+                        spawnMob = new SpawnMob("PigZombie", "{Equipment:[{id:golden_sword},{},{},{},{}]}");
                     } else if ("MHF_Golem".equals(owner)) {
                         spawnMob = new SpawnMob("VillagerGolem", "{}");
                     } else if (mobList.contains(owner)) {
