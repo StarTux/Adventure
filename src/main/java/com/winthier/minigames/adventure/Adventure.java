@@ -563,7 +563,7 @@ public class Adventure extends Game implements Listener {
                             getLogger().warning(String.format("Bad difficulty sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
                     } else if (firstLine.equals("[lock]")) {
-                        String lockName = sign.getLine(1);
+                        String lockName = sign.getLine(1) + sign.getLine(2) + sign.getLine(3);
                         Block attachedBlock = sign.getBlock().getRelative(((org.bukkit.material.Sign)sign.getData()).getAttachedFace());
                         Material mat = attachedBlock.getType();
                         LinkedList<Block> blocksToSearch = new LinkedList<>();
