@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -71,6 +72,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.material.Button;
 import org.bukkit.material.MaterialData;
@@ -140,6 +142,7 @@ public class Adventure extends Game implements Listener {
     final Map<Block, Trigger> triggers = new HashMap<>();
     Difficulty difficulty = Difficulty.NORMAL;
     final Set<EntityType> lockedEntities = EnumSet.noneOf(EntityType.class);
+    final Map<Block, String> lockedBlocks = new HashMap<>();
     // players
     final Map<UUID, Integer> scores = new HashMap<>();
     final Set<UUID> playersOutOfTheGame = new HashSet<>();
@@ -557,6 +560,29 @@ public class Adventure extends Game implements Listener {
                         } catch (IllegalArgumentException iae) {
                             getLogger().warning(String.format("Bad difficulty sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
+                    } else if (firstLine.equals("[lock]")) {
+                        String lockName = sign.getLine(1);
+                        Block attachedBlock = sign.getBlock().getRelative(((org.bukkit.material.Sign)sign.getData()).getAttachedFace());
+                        Material mat = attachedBlock.getType();
+                        LinkedList<Block> blocksToSearch = new LinkedList<>();
+                        blocksToSearch.add(attachedBlock);
+                        Set<Block> blocksSearched = new HashSet<>();
+                        List<Block> result = new ArrayList<>();
+                        int i = 0;
+                        while (!blocksToSearch.isEmpty() && i++ < 64) {
+                            Block block = blocksToSearch.removeFirst();
+                            if (!blocksSearched.contains(block) && block.getType() == mat) {
+                                blocksSearched.add(block);
+                                result.add(block);
+                                blocksToSearch.add(block.getRelative(0, 0, 1));
+                                blocksToSearch.add(block.getRelative(0, 0, -1));
+                                blocksToSearch.add(block.getRelative(0, 1, 0));
+                                blocksToSearch.add(block.getRelative(0, -1, 0));
+                                blocksToSearch.add(block.getRelative(1, 0, 0));
+                                blocksToSearch.add(block.getRelative(-1, 0, 0));
+                            }
+                        }
+                        for (Block block : result) lockedBlocks.put(block, lockName);
                     } else {
                         getLogger().warning("Unrecognized sign: " + firstLine);
                         removeThis = false;
@@ -730,20 +756,6 @@ public class Adventure extends Game implements Listener {
     // Event Handlers
 
     @EventHandler(ignoreCancelled = true)
-    public void onPlayerInteract2(PlayerInteractEvent event) {
-        switch (event.getAction()) {
-        case LEFT_CLICK_BLOCK:
-        case RIGHT_CLICK_BLOCK:
-            Block block = event.getClickedBlock();
-            if (isDropper(block)) {
-                event.setCancelled(true);
-                randomDrop(block.getLocation().add(0.5, 0.0, 0.50));
-                block.setType(Material.AIR);
-            }
-        }
-    }
-    
-    @EventHandler(ignoreCancelled = true)
     public void onBlockFade(BlockFadeEvent event) {
         event.setCancelled(true);
     }
@@ -836,6 +848,46 @@ public class Adventure extends Game implements Listener {
         player.playSound(player.getEyeLocation(), Sound.SUCCESSFUL_HIT, 1.0f, 1.0f);
     }
 
+    boolean playerHoldsKey(Player player, String lockName)
+    {
+        ItemStack item = player.getItemInHand();
+        if (item == null || item.getType() == Material.AIR) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) return false;
+        return lockName.equals(meta.getDisplayName());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
+    public void onPlayerInteractLock(PlayerInteractEvent event)
+    {
+        switch (event.getAction()) {
+        case LEFT_CLICK_BLOCK: break;
+        case RIGHT_CLICK_BLOCK: break;
+        default: return;
+        }
+        Block block = event.getClickedBlock();
+        String lockName = lockedBlocks.get(block);
+        if (lockName == null) return;
+        Player player = event.getPlayer();
+        if (!lockName.isEmpty() && playerHoldsKey(player, lockName)) return;
+        event.setCancelled(true);
+        block.getWorld().playSound(block.getLocation().add(.5, .5, .5), Sound.DOOR_CLOSE, 1, 1);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerInteractDropper(PlayerInteractEvent event) {
+        switch (event.getAction()) {
+        case LEFT_CLICK_BLOCK:
+        case RIGHT_CLICK_BLOCK:
+            Block block = event.getClickedBlock();
+            if (isDropper(block)) {
+                event.setCancelled(true);
+                randomDrop(block.getLocation().add(0.5, 0.0, 0.50));
+                block.setType(Material.AIR);
+            }
+        }
+    }
+    
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         MaterialData data;
