@@ -92,6 +92,7 @@ public class Adventure extends Game implements Listener {
     final String SIDEBAR_OBJECTIVE = "Sidebar";
     final List<String> mobList = Arrays.asList(
         "MHF_Blaze",
+        "MHF_Bunny",
         "MHF_CaveSpider",
         "MHF_Chicken",
         "MHF_Cow",
@@ -100,6 +101,7 @@ public class Adventure extends Game implements Listener {
         "MHF_Enderman",
         "MHF_Ghast",
         "MHF_Golem",
+        "MHF_KillerRabbit",
         "MHF_LavaSlime",
         "MHF_MushroomCow",
         "MHF_Ocelot",
@@ -113,6 +115,7 @@ public class Adventure extends Game implements Listener {
         "MHF_Steve",
         "MHF_Villager",
         "MHF_WSkeleton",
+        "MHF_Witch",
         "MHF_Zombie"
         );
     // minigame stuf
@@ -375,6 +378,10 @@ public class Adventure extends Game implements Listener {
                         spawnMob = new SpawnMob("PigZombie", "{Equipment:[{id:golden_sword},{},{},{},{}]}");
                     } else if ("MHF_Golem".equals(owner)) {
                         spawnMob = new SpawnMob("VillagerGolem", "{}");
+                    } else if ("MHF_KillerRabbit".equals(owner)) {
+                        spawnMob = new SpawnMob("Rabbit", "{RabbitType:99}");
+                    } else if ("MHF_Bunny".equals(owner)) {
+                        spawnMob = new SpawnMob("Rabbit", "{}");
                     } else if (mobList.contains(owner)) {
                         spawnMob = new SpawnMob(owner.substring(4), "{}");
                     }
