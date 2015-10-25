@@ -9,6 +9,7 @@ import com.winthier.minigames.util.Msg;
 import com.winthier.minigames.util.Players;
 import com.winthier.minigames.util.Title;
 import com.winthier.minigames.util.WorldLoader;
+import com.winthier.reward.RewardBuilder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -37,6 +38,7 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.Skull;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
@@ -760,6 +762,18 @@ public class Adventure extends Game implements Listener {
         final int score = getPlayerScore(player);
         final boolean finished = hasFinished(player.getUniqueId());
         highscore.store(player.getUniqueId(), player.getName(), mapId, startTime, new Date(), score, finished);
+        // Rewards
+        if (finished) {
+            ConfigurationSection config = getConfigFile("rewards").getConfigurationSection(mapId);
+            if (config != null) {
+                RewardBuilder reward = RewardBuilder.create().player(player);
+                reward.comment("Beating the " + mapId + " adventure map with a score of " + score + ".");
+                reward.config(config.getConfigurationSection("win"));
+                for (int i = 0; i < score; ++i) reward.config(config.getConfigurationSection("score"));
+                for (int i = 0; i <= score; ++i) reward.config(config.getConfigurationSection("score" + i));
+                reward.store();
+            }
+        }
     }
 
     // Event Handlers
