@@ -286,6 +286,14 @@ public class Adventure extends Game implements Listener {
             if (!player.isOp()) return false;
             cancel();
             player.sendMessage("Cancelling the game");
+        } else if ("finish".equals(command)) {
+            if (!player.isOp()) return false;
+            setFinished(player.getUniqueId());
+            recordPlayerScore(player);
+            if (winLocation != null) player.teleport(winLocation);
+            winCounters.put(player.getUniqueId(), 0);
+            player.getInventory().setItem(8, exitItem.clone());
+            player.getInventory().clear();
         } else if ("item".equals(command)) {
             if (!player.isOp()) return false;
             randomDrop(player.getLocation());
@@ -754,6 +762,16 @@ public class Adventure extends Game implements Listener {
         finished.add(uuid);
     }
 
+    private ConfigurationSection fixRewardConfig(ConfigurationSection config) {
+        if (config == null) return null;
+        if (config.isSet("Daily")) {
+            String val = config.getString("Daily");
+            val = val.replace("%map%", mapId);
+            config.set("Daily", val);
+        }
+        return config;
+    }
+
     void recordPlayerScore(Player player) {
         if (debug) return;
         if (playersOutOfTheGame.contains(player.getUniqueId())) return;
@@ -764,13 +782,19 @@ public class Adventure extends Game implements Listener {
         highscore.store(player.getUniqueId(), player.getName(), mapId, startTime, new Date(), score, finished);
         // Rewards
         if (finished) {
-            ConfigurationSection config = getConfigFile("rewards").getConfigurationSection(mapId);
-            if (config != null) {
+            String key = mapId.replace(" ", "");
+            ConfigurationSection config = getConfigFile("rewards").getConfigurationSection(key);
+            if (config == null) {
+                config = getConfigFile("rewards").getConfigurationSection("*");
+            }
+            if (config == null) {
+                getLogger().info("Rewards section \"" + key + "\" not found, so no rewards are given.");
+            } else {
                 RewardBuilder reward = RewardBuilder.create().player(player);
                 reward.comment("Beating the " + mapId + " adventure map with a score of " + score + ".");
-                reward.config(config.getConfigurationSection("win"));
-                for (int i = 0; i < score; ++i) reward.config(config.getConfigurationSection("score"));
-                for (int i = 0; i <= score; ++i) reward.config(config.getConfigurationSection("score" + i));
+                reward.config(fixRewardConfig(config.getConfigurationSection("win")));
+                for (int i = 0; i < score; ++i) reward.config(fixRewardConfig(config.getConfigurationSection("score")));
+                for (int i = 0; i <= score; ++i) reward.config(fixRewardConfig(config.getConfigurationSection("score" + i)));
                 reward.store();
             }
         }
