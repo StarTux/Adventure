@@ -118,7 +118,10 @@ public class Adventure extends Game implements Listener {
         "MHF_Villager",
         "MHF_WSkeleton",
         "MHF_Witch",
-        "MHF_Zombie"
+        "MHF_Zombie",
+        "MHF_SnowGolem",
+        "MHF_Wolf",
+        "MHF_Wither"
         );
     // minigame stuf
     World world;
@@ -392,6 +395,8 @@ public class Adventure extends Game implements Listener {
                         spawnMob = new SpawnMob("Rabbit", "{RabbitType:99}");
                     } else if ("MHF_Bunny".equals(owner)) {
                         spawnMob = new SpawnMob("Rabbit", "{}");
+                    } else if ("MHF_SnowGolem".equals(owner)) {
+                        spawnMob = new SpawnMob("SnowMan", "{}");
                     } else if (mobList.contains(owner)) {
                         spawnMob = new SpawnMob(owner.substring(4), "{}");
                     }
