@@ -397,6 +397,10 @@ public class Adventure extends Game implements Listener {
                         spawnMob = new SpawnMob("Rabbit", "{}");
                     } else if ("MHF_SnowGolem".equals(owner)) {
                         spawnMob = new SpawnMob("SnowMan", "{}");
+                    } else if ("MHF_Wither".equals(owner)) {
+                        spawnMob = new SpawnMob("WitherBoss", "{}");
+                    } else if ("MHF_Ocelot".equals(owner)) {
+                        spawnMob = new SpawnMob("Ozelot", "{}");
                     } else if (mobList.contains(owner)) {
                         spawnMob = new SpawnMob(owner.substring(4), "{}");
                     }
