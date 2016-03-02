@@ -901,7 +901,7 @@ public class Adventure extends Game implements Listener {
     public void onPlayerPickupItem(PlayerPickupItemEvent event) {
         if (!isDroppedItem(event.getItem().getItemStack())) return;
         final Player player = event.getPlayer();
-        player.playSound(player.getEyeLocation(), Sound.SUCCESSFUL_HIT, 1.0f, 1.0f);
+        player.playSound(player.getEyeLocation(), Sound.ENTITY_ARROW_HIT_PLAYER, 1.0f, 1.0f);
     }
 
     boolean playerHoldsKey(Player player, String lockName)
@@ -927,7 +927,7 @@ public class Adventure extends Game implements Listener {
         Player player = event.getPlayer();
         if (!lockName.isEmpty() && playerHoldsKey(player, lockName)) return;
         event.setCancelled(true);
-        block.getWorld().playSound(block.getLocation().add(.5, .5, .5), Sound.DOOR_CLOSE, 1, 1);
+        block.getWorld().playSound(block.getLocation().add(.5, .5, .5), Sound.BLOCK_WOODEN_DOOR_CLOSE, 1, 1);
     }
 
     @EventHandler(ignoreCancelled = true)
