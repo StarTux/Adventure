@@ -197,6 +197,7 @@ public class Adventure extends Game implements Listener {
         world.setGameRuleValue("doTileDrops", "false");
         world.setGameRuleValue("doMobLoot", "false");
         world.setGameRuleValue("doDaylightCycle", "false");
+        world.setGameRuleValue("naturalRegeneration", "false");
         if (ticks % 20L == 0L) {
             world.setTime(18000);
             world.setStorm(false);
@@ -384,25 +385,33 @@ public class Adventure extends Game implements Listener {
                 if (skull.hasOwner() && skull.getOwner() != null) {
                     String owner = skull.getOwner();
                     if ("MHF_Skeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("Skeleton", "{SkeletonType:0,Equipment:[{id:bow},{},{},{},{}]}");
+                        spawnMob = new SpawnMob("skeleton", "{SkeletonType:0,HandItems:[{id:bow},{}]}");
                     } else if ("MHF_WSkeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("Skeleton", "{SkeletonType:1,Equipment:[{id:stone_sword},{},{},{},{}]}");
+                        spawnMob = new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword},{}]}");
                     } else if ("MHF_PigZombie".equals(owner)) {
-                        spawnMob = new SpawnMob("PigZombie", "{Equipment:[{id:golden_sword},{},{},{},{}]}");
+                        spawnMob = new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword},{}]}");
                     } else if ("MHF_Golem".equals(owner)) {
-                        spawnMob = new SpawnMob("VillagerGolem", "{}");
+                        spawnMob = new SpawnMob("villager_golem", "{}");
                     } else if ("MHF_KillerRabbit".equals(owner)) {
-                        spawnMob = new SpawnMob("Rabbit", "{RabbitType:99}");
+                        spawnMob = new SpawnMob("rabbit", "{RabbitType:99}");
                     } else if ("MHF_Bunny".equals(owner)) {
-                        spawnMob = new SpawnMob("Rabbit", "{}");
+                        spawnMob = new SpawnMob("rabbit", "{}");
                     } else if ("MHF_SnowGolem".equals(owner)) {
-                        spawnMob = new SpawnMob("SnowMan", "{}");
+                        spawnMob = new SpawnMob("snowman", "{}");
                     } else if ("MHF_Wither".equals(owner)) {
-                        spawnMob = new SpawnMob("WitherBoss", "{}");
+                        spawnMob = new SpawnMob("wither", "{}");
                     } else if ("MHF_Ocelot".equals(owner)) {
-                        spawnMob = new SpawnMob("Ozelot", "{}");
+                        spawnMob = new SpawnMob("ocelot", "{}");
+                    } else if ("MHF_CaveSpider".equals(owner)) {
+                        spawnMob = new SpawnMob("cave_spider", "{}");
+                    } else if ("MHF_EnderDragon".equals(owner)) {
+                        spawnMob = new SpawnMob("ender_dragon", "{}");
+                    } else if ("MHF_LavaSlime".equals(owner)) {
+                        spawnMob = new SpawnMob("magma_cube", "{}");
+                    } else if ("MHF_MushroomCow".equals(owner)) {
+                        spawnMob = new SpawnMob("mooshroom", "{}");
                     } else if (mobList.contains(owner)) {
-                        spawnMob = new SpawnMob(owner.substring(4), "{}");
+                        spawnMob = new SpawnMob(owner.substring(4).toLowerCase(), "{}");
                     }
                 }
                 if (spawnMob != null) {
@@ -906,11 +915,25 @@ public class Adventure extends Game implements Listener {
 
     boolean playerHoldsKey(Player player, String lockName)
     {
-        ItemStack item = player.getItemInHand();
+        return itemIsKey(player.getInventory().getItemInMainHand(), lockName) ||
+            itemIsKey(player.getInventory().getItemInOffHand(), lockName);
+    }
+
+    boolean itemIsKey(ItemStack item, String lockName) {
         if (item == null || item.getType() == Material.AIR) return false;
         ItemMeta meta = item.getItemMeta();
         if (meta == null || !meta.hasDisplayName()) return false;
         return lockName.equals(meta.getDisplayName());
+    }
+
+    boolean playerHoldsExitItem(Player player) {
+        return isExitItem(player.getInventory().getItemInMainHand()) ||
+            isExitItem(player.getInventory().getItemInOffHand());
+    }
+
+    boolean isExitItem(ItemStack item) {
+        if (exitItem == null || item == null) return false;
+        return exitItem.isSimilar(item);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
@@ -969,8 +992,7 @@ public class Adventure extends Game implements Listener {
             return;
         }
         final Player player = event.getPlayer();
-        final ItemStack item = event.getPlayer().getItemInHand();
-        if (item.isSimilar(this.exitItem)) {
+        if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
             MinigamesPlugin.getInstance().leavePlayer(player);
         }
@@ -986,8 +1008,7 @@ public class Adventure extends Game implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         final Player player = event.getPlayer();
-        final ItemStack item = event.getPlayer().getItemInHand();
-        if (item.isSimilar(this.exitItem)) {
+        if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
             MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
             return;
@@ -998,8 +1019,7 @@ public class Adventure extends Game implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractAtEntity(PlayerInteractAtEntityEvent event) {
         final Player player = event.getPlayer();
-        final ItemStack item = event.getPlayer().getItemInHand();
-        if (item.isSimilar(this.exitItem)) {
+        if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
             MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
             return;
