@@ -385,11 +385,11 @@ public class Adventure extends Game implements Listener {
                 if (skull.hasOwner() && skull.getOwner() != null) {
                     String owner = skull.getOwner();
                     if ("MHF_Skeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("skeleton", "{SkeletonType:0,HandItems:[{id:bow},{}]}");
+                        spawnMob = new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
                     } else if ("MHF_WSkeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword},{}]}");
+                        spawnMob = new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword,Count:1},{}]}");
                     } else if ("MHF_PigZombie".equals(owner)) {
-                        spawnMob = new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword},{}]}");
+                        spawnMob = new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword,Count:1},{}]}");
                     } else if ("MHF_Golem".equals(owner)) {
                         spawnMob = new SpawnMob("villager_golem", "{}");
                     } else if ("MHF_KillerRabbit".equals(owner)) {
