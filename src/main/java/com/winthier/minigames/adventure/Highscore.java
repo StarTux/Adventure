@@ -45,8 +45,8 @@ public class Highscore {
             update.setString(1, playerUuid.toString());
             update.setString(2, playerName);
             update.setString(3, mapID);
-            update.setDate(4, new java.sql.Date(startTime.getTime()));
-            update.setDate(5, new java.sql.Date(endTime.getTime()));
+            update.setTimestamp(4, new java.sql.Timestamp(startTime.getTime()));
+            update.setTimestamp(5, new java.sql.Timestamp(endTime.getTime()));
             update.setInt(6, score);
             update.setBoolean(7, finished);
             update.executeUpdate();
