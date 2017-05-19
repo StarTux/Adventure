@@ -1,9 +1,8 @@
 package com.winthier.minigames.adventure;
 
-import com.avaje.ebean.SqlQuery;
-import com.avaje.ebean.SqlRow;
-import com.avaje.ebean.SqlUpdate;
 import com.winthier.minigames.MinigamesPlugin;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -29,7 +28,7 @@ public class Highscore {
             " PRIMARY KEY (`id`)" +
             ")";
         try {
-            MinigamesPlugin.getInstance().getDatabase().createSqlUpdate(sql).execute();
+            MinigamesPlugin.getInstance().getDb().executeUpdate(sql);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -40,18 +39,17 @@ public class Highscore {
             "INSERT INTO `Adventure` (" +
             " `player_uuid`, `player_name`, `map_id`, `start_time`, `end_time`, `score`, `finished`" +
             ") VALUES (" +
-            " :playerUuid, :playerName, :mapID, :startTime, :endTime, :score, :finished" +
+            " ?, ?, ?, ?, ?, ?, ?" +
             ")";
-        try {
-            SqlUpdate update = MinigamesPlugin.getInstance().getDatabase().createSqlUpdate(sql);
-            update.setParameter("playerUuid", playerUuid);
-            update.setParameter("playerName", playerName);
-            update.setParameter("mapID", mapID);
-            update.setParameter("startTime", startTime);
-            update.setParameter("endTime", endTime);
-            update.setParameter("score", score);
-            update.setParameter("finished", finished);
-            update.execute();
+        try (PreparedStatement update = MinigamesPlugin.getInstance().getDb().getConnection().prepareStatement(sql)) {
+            update.setString(1, playerUuid.toString());
+            update.setString(2, playerName);
+            update.setString(3, mapID);
+            update.setDate(4, new java.sql.Date(startTime.getTime()));
+            update.setDate(5, new java.sql.Date(endTime.getTime()));
+            update.setInt(6, score);
+            update.setBoolean(7, finished);
+            update.executeUpdate();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -61,18 +59,22 @@ public class Highscore {
     {
         if (list != null) return list;
         String sql =
-            "SELECT * from Adventure WHERE map_id = :mapId AND finished = 1 ORDER BY score DESC, start_time ASC LIMIT 10";
-        SqlQuery query = MinigamesPlugin.getInstance().getDatabase().createSqlQuery(sql);
-        query.setParameter("mapId", mapId);
+            "SELECT * from Adventure WHERE map_id = ? AND finished = 1 ORDER BY score DESC, start_time ASC LIMIT 10";
         List<Entry> result = new ArrayList<>();
-        for (SqlRow row : query.findList()) {
-            String name = row.getString("player_name");
-            int score = row.getInteger("score");
-            Date startTime = row.getDate("start_time");
-            Date endTime = row.getDate("end_time");
-            result.add(new Entry(name, score, endTime.getTime() - startTime.getTime()));
+        try (PreparedStatement query = MinigamesPlugin.getInstance().getDb().getConnection().prepareStatement(sql)) {
+            query.setString(1, mapId);
+            ResultSet row = query.executeQuery();
+            while (row.next()) {
+                String name = row.getString("player_name");
+                int score = row.getInt("score");
+                Date startTime = row.getDate("start_time");
+                Date endTime = row.getDate("end_time");
+                result.add(new Entry(name, score, endTime.getTime() - startTime.getTime()));
+            }
+            list = result;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-        list = result;
-        return result;
+        return list;
     }
 }
