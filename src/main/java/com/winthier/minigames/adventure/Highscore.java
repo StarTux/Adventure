@@ -67,8 +67,8 @@ public class Highscore {
             while (row.next()) {
                 String name = row.getString("player_name");
                 int score = row.getInt("score");
-                Date startTime = row.getDate("start_time");
-                Date endTime = row.getDate("end_time");
+                Date startTime = row.getTimestamp("start_time");
+                Date endTime = row.getTimestamp("end_time");
                 result.add(new Entry(name, score, endTime.getTime() - startTime.getTime()));
             }
             list = result;
