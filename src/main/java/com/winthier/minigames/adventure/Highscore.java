@@ -1,15 +1,17 @@
 package com.winthier.minigames.adventure;
 
-import com.winthier.minigames.MinigamesPlugin;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import lombok.Value;
 
+@RequiredArgsConstructor
 public class Highscore {
+    private final Adventure plugin;
     @Value class Entry{ String name; int score; long time; }
     List<Entry> list = null;
 
@@ -28,7 +30,7 @@ public class Highscore {
             " PRIMARY KEY (`id`)" +
             ")";
         try {
-            MinigamesPlugin.getInstance().getDb().executeUpdate(sql);
+            plugin.db.executeUpdate(sql);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -41,7 +43,7 @@ public class Highscore {
             ") VALUES (" +
             " ?, ?, ?, ?, ?, ?, ?" +
             ")";
-        try (PreparedStatement update = MinigamesPlugin.getInstance().getDb().getConnection().prepareStatement(sql)) {
+        try (PreparedStatement update = plugin.db.getConnection().prepareStatement(sql)) {
             update.setString(1, playerUuid.toString());
             update.setString(2, playerName);
             update.setString(3, mapID);
@@ -61,7 +63,7 @@ public class Highscore {
         String sql =
             "SELECT * from Adventure WHERE map_id = ? AND finished = 1 ORDER BY score DESC, start_time ASC LIMIT 10";
         List<Entry> result = new ArrayList<>();
-        try (PreparedStatement query = MinigamesPlugin.getInstance().getDb().getConnection().prepareStatement(sql)) {
+        try (PreparedStatement query = plugin.db.getConnection().prepareStatement(sql)) {
             query.setString(1, mapId);
             ResultSet row = query.executeQuery();
             while (row.next()) {

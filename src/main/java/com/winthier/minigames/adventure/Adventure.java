@@ -1,15 +1,7 @@
 package com.winthier.minigames.adventure;
 
-import com.winthier.minigames.MinigamesPlugin;
-import com.winthier.minigames.event.player.PlayerLeaveEvent;
-import com.winthier.minigames.game.Game;
-import com.winthier.minigames.util.BukkitFuture;
-import com.winthier.minigames.util.Console;
-import com.winthier.minigames.util.Msg;
-import com.winthier.minigames.util.Players;
-import com.winthier.minigames.util.Title;
-import com.winthier.minigames.util.WorldLoader;
-import com.winthier.reward.RewardBuilder;
+import com.winthier.sql.SQLDatabase;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -32,13 +24,18 @@ import org.bukkit.Material;
 import org.bukkit.SkullType;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.WorldCreator;
+import org.bukkit.WorldType;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.Skull;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
@@ -80,13 +77,16 @@ import org.bukkit.material.Button;
 import org.bukkit.material.MaterialData;
 import org.bukkit.material.PressurePlate;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.Vector;
+import org.json.simple.JSONValue;
+import org.spigotmc.event.player.PlayerSpawnLocationEvent;
 
-public class Adventure extends Game implements Listener {
+public class Adventure extends JavaPlugin implements Listener {
     @Value static class ChunkCoord { int x, z; }
     @Value static class SpawnMob { String id; String tagData; }
     static interface Trigger { void call(Block block, Player player); }
@@ -126,7 +126,6 @@ public class Adventure extends Game implements Listener {
     // minigame stuf
     World world;
     BukkitRunnable tickTask;
-    boolean solo = false;
     // chunk processing
     Set<ChunkCoord> processedChunks = new HashSet<>();
     Map<Block, SpawnMob> spawnMobs = new HashMap<>();
@@ -134,8 +133,8 @@ public class Adventure extends Game implements Listener {
     LivingEntity spawnedMob = null;
     boolean didSomeoneJoin = false;
     // level config
-    String mapId = "Test";
-    String mapPath = "Adventure/Test";
+    String mapId;
+    UUID gameId;
     boolean debug = false;
     final List<Location> spawns = new ArrayList<>();
     Location lookAt = null;
@@ -156,42 +155,49 @@ public class Adventure extends Game implements Listener {
     final Set<UUID> playersOutOfTheGame = new HashSet<>();
     final Map<UUID, Integer> winCounters = new HashMap<>();
     final Set<UUID> finished = new HashSet<>();
+    final Set<UUID> joined = new HashSet<>();
     // score keeping
     Scoreboard scoreboard;
-    final Highscore highscore = new Highscore();
+    final Highscore highscore = new Highscore(this);
     Date startTime;
     // state
     final Random random = new Random(System.currentTimeMillis());
     long ticks;
     long emptyTicks;
-    
+    //
+    SQLDatabase db;
+
     // Setup event handlers
-    
+
     @Override
     public void onEnable() {
-        System.out.println(getConfig().getValues(true));
-        mapId = getConfig().getString("MapID", mapId);
-        mapPath = getConfig().getString("MapPath", mapPath);
-        debug = getConfig().getBoolean("Debug", debug);
-        solo = getConfig().getBoolean("Solo", solo);
-        WorldLoader.loadWorlds(this, new BukkitFuture<WorldLoader>() {
-            @Override public void run() {
-                onWorldsLoaded(get());
-            }
-        }, mapPath);
-    }
-
-    public void onDisable() {
-        if (tickTask != null) {
-            tickTask.cancel();
-            tickTask = null;
+        db = new SQLDatabase(this);
+        // Begin copy-pasted, modified
+        ConfigurationSection gameConfig;
+        ConfigurationSection worldConfig;
+        try {
+            gameConfig = new YamlConfiguration().createSection("tmp", (Map<String, Object>)JSONValue.parse(new FileReader("game_config.json")));
+            worldConfig = YamlConfiguration.loadConfiguration(new FileReader("GameWorld/config.yml"));
+        } catch (Throwable t) {
+            t.printStackTrace();
+            getServer().shutdown();
+            return;
         }
-        processedChunks.clear();
-        spawnMobs.clear();
-    }
+        mapId = gameConfig.getString("map_id", mapId);
+        gameId = UUID.fromString(gameConfig.getString("unique_id"));
+        debug = gameConfig.getBoolean("debug", debug);
 
-    void onWorldsLoaded(WorldLoader worldLoader) {
-        this.world = worldLoader.getWorld(0);
+        WorldCreator wc = WorldCreator.name("GameWorld");
+        wc.generator("VoidGenerator");
+        wc.type(WorldType.FLAT);
+        try {
+            wc.environment(World.Environment.valueOf(worldConfig.getString("world.Environment").toUpperCase()));
+        } catch (Throwable t) {
+            wc.environment(World.Environment.NORMAL);
+        }
+        world = wc.createWorld();
+        // End copy-pasted, modified
+
         world.setDifficulty(difficulty);
         world.setPVP(false);
         world.setGameRuleValue("doTileDrops", "false");
@@ -210,29 +216,28 @@ public class Adventure extends Game implements Listener {
                 onTick();
             }
         };
-        tickTask.runTaskTimer(MinigamesPlugin.getInstance(), 1L, 1L);
-        MinigamesPlugin.getInstance().getEventManager().registerEvents(this, this);
+        tickTask.runTaskTimer(this, 1L, 1L);
+        getServer().getPluginManager().registerEvents(this, this);
         setupScoreboard();
         processChunkArea(world.getSpawnLocation().getChunk());
         startTime = new Date();
         highscore.init();
-        ready();
     }
 
     void onTick() {
         final long ticks = this.ticks++;
-        if (getPlayerUuids().isEmpty()) {
-            cancel();
+        if (didSomeoneJoin && getServer().getOnlinePlayers().isEmpty()) {
+            getServer().shutdown();
             return;
         }
         if (ticks >= 1200L) {
             if (!didSomeoneJoin) {
-                cancel();
+                getServer().shutdown();
                 return;
-            } else if (getOnlinePlayers().isEmpty()) {
+            } else if (getServer().getOnlinePlayers().isEmpty()) {
                 final long emptyTicks = this.emptyTicks++;
                 if (emptyTicks >= 1200L) {
-                    cancel();
+                    getServer().shutdown();
                     return;
                 }
             } else {
@@ -245,11 +250,9 @@ public class Adventure extends Game implements Listener {
         countPlayerScores();
     }
 
-    @Override
     public void onPlayerReady(Player player) {
         didSomeoneJoin = this.didSomeoneJoin;
         this.didSomeoneJoin = true;
-        Players.reset(player);
         player.setGameMode(GameMode.ADVENTURE);
         player.setScoreboard(scoreboard);
         if (exitItem != null) player.getInventory().setItem(8, exitItem.clone());
@@ -265,12 +268,16 @@ public class Adventure extends Game implements Listener {
                     player.sendMessage("");
                 }
             }
-        }.runTaskLater(MinigamesPlugin.getInstance(), 20*5);
+        }.runTaskLater(this, 20*5);
     }
 
-    @Override
-    public Location getSpawnLocation(Player player)
-    {
+    @EventHandler
+    public void onPlayerSpawnLocation(PlayerSpawnLocationEvent event) {
+        if (joined.contains(event.getPlayer().getUniqueId())) return;
+        event.setSpawnLocation(getSpawnLocation(event.getPlayer()));
+    }
+
+    public Location getSpawnLocation(Player player) {
         Location spawn;
         if (spawns.isEmpty()) {
             spawn = world.getSpawnLocation();
@@ -286,11 +293,11 @@ public class Adventure extends Game implements Listener {
     }
 
     @Override
-    public boolean onCommand(Player player, String command, String[] args) {
+    public boolean onCommand(CommandSender sender, Command bcommand, String command, String[] args) {
+        if (!(sender instanceof Player)) return true;
+        Player player = (Player)sender;
         if ("quit".equals(command)) {
-            if (!player.isOp()) return false;
-            cancel();
-            player.sendMessage("Cancelling the game");
+            leavePlayer(player);
         } else if ("finish".equals(command)) {
             if (!player.isOp()) return false;
             setFinished(player.getUniqueId());
@@ -310,13 +317,6 @@ public class Adventure extends Game implements Listener {
         return true;
     }
 
-    @Override
-    public boolean joinPlayers(List<UUID> uuids) {
-        if (ticks > 20 * 60) return false;
-        if (solo) return false;
-        return super.joinPlayers(uuids);
-    }
-
     void processWinners() {
         final List<UUID> removePlayers = new ArrayList<>();
         for (UUID uuid : winCounters.keySet()) {
@@ -329,19 +329,19 @@ public class Adventure extends Game implements Listener {
             winCounters.put(uuid, counter + 1);
             switch (counter) {
             case 20:
-                Title.show(player, "&9Congratulations", String.format("&9You completed the %s adventure", mapId)); // TODO name
+                Msg.sendTitle(player, "&9Congratulations", String.format("&9You completed the %s adventure", mapId)); // TODO name
                 break;
             case 200: {
                 if (!credits.isEmpty()) {
                     StringBuilder sb = new StringBuilder("&9");
                     sb.append(credits.get(0));
                     for (int i = 1; i < credits.size(); ++i) sb.append(" ").append(credits.get(i));
-                    Title.show(player, "&9Map created by", sb.toString());
+                    Msg.sendTitle(player, "&9Map created by", sb.toString());
                 }
                 break;
             }
             case 1200:
-                MinigamesPlugin.getInstance().leavePlayer(player);
+                leavePlayer(player);
                 removePlayers.add(uuid);
                 break;
             }
@@ -351,7 +351,7 @@ public class Adventure extends Game implements Listener {
     }
 
     void processPlayerChunks() {
-        for (Player player : getOnlinePlayers()) {
+        for (Player player : getServer().getOnlinePlayers()) {
             Chunk chunk = player.getLocation().getChunk();
             processChunkArea(chunk.getX(), chunk.getZ());
         }
@@ -360,7 +360,7 @@ public class Adventure extends Game implements Listener {
     void processChunkArea(Chunk chunk) {
         processChunkArea(chunk.getX(), chunk.getZ());
     }
-    
+
     void processChunkArea(int cx, int cz) {
         final int RADIUS = 4;
         for (int dx = -RADIUS; dx <= RADIUS; ++dx) {
@@ -634,7 +634,7 @@ public class Adventure extends Game implements Listener {
     Player isNearAnyPlayer(Block block) {
         final int RADIUS = 16;
         final int VRADIUS = 8;
-        for (Player player : getOnlinePlayers()) {
+        for (Player player : getServer().getOnlinePlayers()) {
             final int px, py, pz;
             {
                 final Location tmp = player.getLocation();
@@ -666,7 +666,7 @@ public class Adventure extends Game implements Listener {
                                            spawnMob.getTagData() != null ? spawnMob.getTagData() : "");
             expectMob = true;
             try {
-                Console.command(command);
+                Msg.consoleCommand(command);
             } catch (Exception e) {
                 e.printStackTrace();
                 expectMob = false;
@@ -723,7 +723,7 @@ public class Adventure extends Game implements Listener {
     }
 
     void setupScoreboard() {
-        scoreboard = MinigamesPlugin.getInstance().getServer().getScoreboardManager().getNewScoreboard();
+        scoreboard = getServer().getScoreboardManager().getNewScoreboard();
         Objective objective = scoreboard.registerNewObjective(SIDEBAR_OBJECTIVE, "dummy");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         objective.setDisplayName(Msg.format("&9Score"));
@@ -766,7 +766,7 @@ public class Adventure extends Game implements Listener {
     }
 
     void countPlayerScores() {
-        for (Player player : getOnlinePlayers()) {
+        for (Player player : getServer().getOnlinePlayers()) {
             if (playersOutOfTheGame.contains(player.getUniqueId())) continue;
             int score = countPlayerScore(player);
             setPlayerScore(player, score);
@@ -799,24 +799,6 @@ public class Adventure extends Game implements Listener {
         final int score = getPlayerScore(player);
         final boolean finished = hasFinished(player.getUniqueId());
         highscore.store(player.getUniqueId(), player.getName(), mapId, startTime, new Date(), score, finished);
-        // Rewards
-        if (finished) {
-            String key = mapId.replace(" ", "");
-            ConfigurationSection config = getConfigFile("rewards").getConfigurationSection(key);
-            if (config == null) {
-                config = getConfigFile("rewards").getConfigurationSection("*");
-            }
-            if (config == null) {
-                getLogger().info("Rewards section \"" + key + "\" not found, so no rewards are given.");
-            } else {
-                RewardBuilder reward = RewardBuilder.create().player(player);
-                reward.comment("Beating the " + mapId + " adventure map with a score of " + score + ".");
-                reward.config(fixRewardConfig(config.getConfigurationSection("win")));
-                for (int i = 0; i < score; ++i) reward.config(fixRewardConfig(config.getConfigurationSection("score")));
-                for (int i = 0; i <= score; ++i) reward.config(fixRewardConfig(config.getConfigurationSection("score" + i)));
-                reward.store();
-            }
-        }
     }
 
     // Event Handlers
@@ -830,7 +812,7 @@ public class Adventure extends Game implements Listener {
     public void onBlockGrow(BlockGrowEvent event) {
         event.setCancelled(true);
     }
-    
+
     @EventHandler(ignoreCancelled = true)
     public void onBlockForm(BlockFormEvent event) {
         event.setCancelled(true);
@@ -876,23 +858,22 @@ public class Adventure extends Game implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         final Player player = event.getEntity();
         event.getDrops().clear();
-        Players.reset(player);
+        player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
         new BukkitRunnable() {
             @Override public void run() {
-                MinigamesPlugin.getInstance().leavePlayer(player);
+                leavePlayer(player);
             }
-        }.runTaskLater(MinigamesPlugin.getInstance(), 20L);
+        }.runTaskLater(this, 20L);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerRespawn(PlayerRespawnEvent event) {
-        MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+        leavePlayer(event.getPlayer());
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onEntityRegainHealth(EntityRegainHealthEvent event)
-    {
+    public void onEntityRegainHealth(EntityRegainHealthEvent event) {
         if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED) {
             event.setCancelled(true);
         }
@@ -900,13 +881,19 @@ public class Adventure extends Game implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (playersOutOfTheGame.contains(event.getPlayer().getUniqueId())) {
-            MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+        final Player player = event.getPlayer();
+        final UUID uuid = player.getUniqueId();
+        if (!joined.contains(uuid)) {
+            joined.add(uuid);
+            onPlayerReady(player);
+        }
+        if (playersOutOfTheGame.contains(uuid)) {
+            leavePlayer(player);
             return;
         }
-        event.getPlayer().setScoreboard(scoreboard);
+        player.setScoreboard(scoreboard);
     }
-    
+
     @EventHandler(ignoreCancelled = true)
     public void onPlayerPickupItem(PlayerPickupItemEvent event) {
         if (!isDroppedItem(event.getItem().getItemStack())) return;
@@ -914,8 +901,7 @@ public class Adventure extends Game implements Listener {
         player.playSound(player.getEyeLocation(), Sound.ENTITY_ARROW_HIT_PLAYER, 1.0f, 1.0f);
     }
 
-    boolean playerHoldsKey(Player player, String lockName)
-    {
+    boolean playerHoldsKey(Player player, String lockName) {
         return itemIsKey(player.getInventory().getItemInMainHand(), lockName) ||
             itemIsKey(player.getInventory().getItemInOffHand(), lockName);
     }
@@ -938,8 +924,7 @@ public class Adventure extends Game implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
-    public void onPlayerInteractLock(PlayerInteractEvent event)
-    {
+    public void onPlayerInteractLock(PlayerInteractEvent event) {
         switch (event.getAction()) {
         case LEFT_CLICK_BLOCK: break;
         case RIGHT_CLICK_BLOCK: break;
@@ -967,7 +952,7 @@ public class Adventure extends Game implements Listener {
             }
         }
     }
-    
+
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         MaterialData data;
@@ -995,12 +980,11 @@ public class Adventure extends Game implements Listener {
         final Player player = event.getPlayer();
         if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
-            MinigamesPlugin.getInstance().leavePlayer(player);
+            leavePlayer(player);
         }
     }
 
-    void onClickEntity(Player player, Entity e, Cancellable event)
-    {
+    void onClickEntity(Player player, Entity e, Cancellable event) {
         if (lockedEntities.contains(e.getType())) {
             event.setCancelled(true);
         }
@@ -1011,7 +995,7 @@ public class Adventure extends Game implements Listener {
         final Player player = event.getPlayer();
         if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
-            MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+            leavePlayer(event.getPlayer());
             return;
         }
         onClickEntity(player, event.getRightClicked(), event);
@@ -1022,34 +1006,29 @@ public class Adventure extends Game implements Listener {
         final Player player = event.getPlayer();
         if (playerHoldsExitItem(player)) {
             event.setCancelled(true);
-            MinigamesPlugin.getInstance().leavePlayer(event.getPlayer());
+            leavePlayer(event.getPlayer());
             return;
         }
         onClickEntity(player, event.getRightClicked(), event);
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onEntityDamageByEntity(EntityDamageByEntityEvent event)
-    {
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player) {
             onClickEntity((Player)event.getDamager(), event.getEntity(), event);
         }
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onHangingBreak(HangingBreakEvent event)
-    {
+    public void onHangingBreak(HangingBreakEvent event) {
         if (lockedEntities.contains(event.getEntity().getType())) {
             event.setCancelled(true);
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onPlayerLeave(PlayerLeaveEvent event) {
-        final Player player = event.getPlayer();
-        if (player != null) {
-            recordPlayerScore(player);
-        }
+    public void leavePlayer(Player player) {
+        recordPlayerScore(player);
+        player.kickPlayer("Leaving");
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -1091,7 +1070,7 @@ public class Adventure extends Game implements Listener {
             }
         }
     }
-    
+
     void checkPortalBlock(final Block block, Set<Block> blocks, Set<Block> checked) {
         if (checked.contains(block)) return;
         checked.add(block);
@@ -1147,8 +1126,7 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    void showHighscore(Player player, List<Highscore.Entry> entries)
-    {
+    void showHighscore(Player player, List<Highscore.Entry> entries) {
         int i = 1;
         Msg.send(player, "&b&l" + mapId + " Highscore");
         Msg.send(player, "&3Rank &fScore &3Time &fName");
@@ -1160,14 +1138,12 @@ public class Adventure extends Game implements Listener {
         }
     }
 
-    void showHighscore(Player player)
-    {
+    void showHighscore(Player player) {
         List<Highscore.Entry> entries = highscore.list(mapId);
         showHighscore(player, entries);
     }
 
-    void showCredits(Player player)
-    {
+    void showCredits(Player player) {
         StringBuilder sb = new StringBuilder();
         for (String credit : credits) sb.append(" ").append(credit);
         Msg.send(player, "&b&l%s&r built by&b%s", mapId, sb.toString());

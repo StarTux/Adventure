@@ -4,7 +4,7 @@
   <groupId>com.winthier.minigames.adventure</groupId>
   <artifactId>adventure</artifactId>
   <packaging>jar</packaging>
-  <version>0.1</version>
+  <version>0.1-SNAPSHOT</version>
   <name>Adventure</name>
   <url>http://maven.apache.org</url>
   <properties>
@@ -22,7 +22,7 @@
     <dependency>
       <groupId>org.spigotmc</groupId>
       <artifactId>spigot-api</artifactId>
-      <version>1.11.2-R0.1-SNAPSHOT</version>
+      <version>1.12.2-R0.1-SNAPSHOT</version>
     </dependency>
     <!-- Lombok -->
     <dependency>
@@ -31,25 +31,11 @@
       <version>1.14.8</version>
       <scope>provided</scope>
     </dependency>
-    <!-- Minigames -->
-    <dependency>
-      <groupId>com.winthier.minigames</groupId>
-      <artifactId>minigames</artifactId>
-      <version>0.1</version>
-      <scope>provided</scope>
-    </dependency>
-    <!-- Reward -->
-    <dependency>
-      <groupId>com.winthier.reward</groupId>
-      <artifactId>reward</artifactId>
-      <version>0.1</version>
-      <scope>provided</scope>
-    </dependency>
     <!-- SQL -->
     <dependency>
       <groupId>com.winthier.sql</groupId>
       <artifactId>sql</artifactId>
-      <version>0.1</version>
+      <version>0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>

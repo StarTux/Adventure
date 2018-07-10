@@ -1,0 +1,11 @@
+name: Adventure
+description: Adventure Map Engins
+authors: [ StarTux ]
+version: 0.1-SNAPSHOT
+main: com.winthier.minigames.adventure.Adventure
+depend: [ SQL, Connect ]
+softdepend: []
+commands:
+  colorfall:
+    aliases: [highscore, hi, quit]
+permissions: {}
