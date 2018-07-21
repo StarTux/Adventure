@@ -21,7 +21,6 @@ import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.SkullType;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -55,6 +54,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
@@ -64,7 +64,6 @@ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -74,7 +73,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.material.Button;
-import org.bukkit.material.MaterialData;
 import org.bukkit.material.PressurePlate;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -383,8 +381,8 @@ public class Adventure extends JavaPlugin implements Listener {
             if (state instanceof Skull) {
                 SpawnMob spawnMob = null;
                 final Skull skull = (Skull)state;
-                if (skull.hasOwner() && skull.getOwner() != null) {
-                    String owner = skull.getOwner();
+                if (skull.hasOwner() && skull.getOwningPlayer() != null) {
+                    String owner = skull.getOwningPlayer().getName();
                     if ("MHF_Skeleton".equals(owner)) {
                         spawnMob = new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
                     } else if ("MHF_WSkeleton".equals(owner)) {
@@ -426,11 +424,11 @@ public class Adventure extends JavaPlugin implements Listener {
                 if ("[droppers]".equals(name)) {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
-                            if (item.getType() == Material.SKULL_ITEM) {
+                            if (item.getType() == Material.PLAYER_HEAD) {
                                 SkullMeta meta = (SkullMeta)item.getItemMeta();
-                                String owner = meta.getOwner();
+                                String owner = meta.getOwningPlayer().getName();
                                 if (owner != null) {
-                                    dropperSkulls.add(meta.getOwner());
+                                    dropperSkulls.add(meta.getOwningPlayer().getName());
                                 }
                             } else {
                                 dropperBlocks.add(item.getType());
@@ -700,11 +698,11 @@ public class Adventure extends JavaPlugin implements Listener {
 
     boolean isDropper(Block block)
     {
-        if (block.getType() == Material.SKULL) {
+        if (block.getType() == Material.PLAYER_HEAD) {
             BlockState state = block.getState();
             if (state instanceof Skull) {
                 Skull skull = (Skull)state;
-                String owner = skull.getOwner();
+                String owner = skull.getOwningPlayer().getName();
                 return owner != null && dropperSkulls.contains(owner);
             } else {
                 return false;
@@ -724,7 +722,7 @@ public class Adventure extends JavaPlugin implements Listener {
 
     void setupScoreboard() {
         scoreboard = getServer().getScoreboardManager().getNewScoreboard();
-        Objective objective = scoreboard.registerNewObjective(SIDEBAR_OBJECTIVE, "dummy");
+        Objective objective = scoreboard.registerNewObjective(SIDEBAR_OBJECTIVE, "dummy", "Dummy");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         objective.setDisplayName(Msg.format("&9Score"));
     }
@@ -830,7 +828,7 @@ public class Adventure extends JavaPlugin implements Listener {
         for (Block block : event.blockList()) {
             if (block.getType() == Material.ICE) {
                 block.setType(Material.WATER);
-            } else if (block.getType() == Material.PORTAL) {
+            } else if (block.getType() == Material.NETHER_PORTAL) {
                 // ignore
             } else {
                 addBlocks.add(block);
@@ -895,9 +893,10 @@ public class Adventure extends JavaPlugin implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onPlayerPickupItem(PlayerPickupItemEvent event) {
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
         if (!isDroppedItem(event.getItem().getItemStack())) return;
-        final Player player = event.getPlayer();
+        final Player player = (Player)event.getEntity();
         player.playSound(player.getEyeLocation(), Sound.ENTITY_ARROW_HIT_PLAYER, 1.0f, 1.0f);
     }
 
@@ -955,23 +954,43 @@ public class Adventure extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        MaterialData data;
+        final Block block = event.getClickedBlock();
         switch (event.getAction()) {
         case PHYSICAL:
-            data = event.getClickedBlock().getState().getData();
-            if (data instanceof PressurePlate) {
-                onPressurePlate(event.getPlayer(), event.getClickedBlock(), (PressurePlate)data);
-            } else {
+            switch (block.getType()) {
+            case ACACIA_PRESSURE_PLATE:
+            case BIRCH_PRESSURE_PLATE:
+            case DARK_OAK_PRESSURE_PLATE:
+            case HEAVY_WEIGHTED_PRESSURE_PLATE:
+            case JUNGLE_PRESSURE_PLATE:
+            case LIGHT_WEIGHTED_PRESSURE_PLATE:
+            case OAK_PRESSURE_PLATE:
+            case SPRUCE_PRESSURE_PLATE:
+            case STONE_PRESSURE_PLATE:
+                onPressurePlate(event.getPlayer(), event.getClickedBlock());
                 event.setCancelled(true);
+                break;
+            default:
+                break;
             }
             return;
         case RIGHT_CLICK_AIR:
             break;
         case RIGHT_CLICK_BLOCK:
-            data = event.getClickedBlock().getState().getData();
-            if (data instanceof Button) {
-                onButtonPush(event.getPlayer(), event.getClickedBlock(), (Button)data);
+            switch (block.getType()) {
+            case ACACIA_BUTTON:
+            case BIRCH_BUTTON:
+            case DARK_OAK_BUTTON:
+            case JUNGLE_BUTTON:
+            case OAK_BUTTON:
+            case SPRUCE_BUTTON:
+            case STONE_BUTTON:
+            case LEGACY_STONE_BUTTON:
+            case LEGACY_WOOD_BUTTON:
+                onButtonPush(event.getPlayer(), event.getClickedBlock());
                 return;
+            default:
+                break;
             }
             break;
         default:
@@ -1078,7 +1097,7 @@ public class Adventure extends JavaPlugin implements Listener {
         if (type.isSolid()) {
             blocks.add(block);
         }
-        if (type == Material.PORTAL) {
+        if (type == Material.NETHER_PORTAL) {
             for (BlockFace face : ALL_FACES) {
                 Block otherBlock = block.getRelative(face);
                 checkPortalBlock(otherBlock, blocks, checked);
@@ -1089,17 +1108,17 @@ public class Adventure extends JavaPlugin implements Listener {
     Set<Block> getPortalNear(final Block block) {
         Set<Block> blocks = new HashSet<Block>();
         Set<Block> checked = new HashSet<Block>();
-        if (block.getType() == Material.PORTAL) checkPortalBlock(block, blocks, checked);
+        if (block.getType() == Material.NETHER_PORTAL) checkPortalBlock(block, blocks, checked);
         for (BlockFace face : ALL_FACES) {
             Block otherBlock = block.getRelative(face);
-            if (otherBlock.getType() == Material.PORTAL) checkPortalBlock(otherBlock, blocks, checked);
+            if (otherBlock.getType() == Material.NETHER_PORTAL) checkPortalBlock(otherBlock, blocks, checked);
         }
         return blocks;
     }
 
-    void onButtonPush(Player player, Block block, Button button) {
-        //if (button.isPowered()) return;
-        BlockFace face = button.getAttachedFace();
+    void onButtonPush(Player player, Block block) {
+        org.bukkit.block.data.Directional rot = (org.bukkit.block.data.Directional)block.getBlockData();
+        BlockFace face = rot.getFacing().getOppositeFace();
         block = block.getRelative(face);
         boolean result = false;
         while (true) {
@@ -1112,8 +1131,7 @@ public class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    void onPressurePlate(Player player, Block block, PressurePlate plate) {
-        //if (plate.isPressed()) return;
+    void onPressurePlate(Player player, Block block) {
         block = block.getRelative(BlockFace.DOWN);
         boolean result = false;
         while (true) {
