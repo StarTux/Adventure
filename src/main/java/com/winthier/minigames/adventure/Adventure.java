@@ -381,8 +381,8 @@ public class Adventure extends JavaPlugin implements Listener {
             if (state instanceof Skull) {
                 SpawnMob spawnMob = null;
                 final Skull skull = (Skull)state;
-                if (skull.hasOwner() && skull.getOwningPlayer() != null) {
-                    String owner = skull.getOwningPlayer().getName();
+                if (skull.hasOwner()) {
+                    String owner = skull.getOwner();
                     if ("MHF_Skeleton".equals(owner)) {
                         spawnMob = new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
                     } else if ("MHF_WSkeleton".equals(owner)) {
@@ -426,9 +426,9 @@ public class Adventure extends JavaPlugin implements Listener {
                         if (item != null) {
                             if (item.getType() == Material.PLAYER_HEAD) {
                                 SkullMeta meta = (SkullMeta)item.getItemMeta();
-                                String owner = meta.getOwningPlayer().getName();
+                                String owner = meta.getOwner();
                                 if (owner != null) {
-                                    dropperSkulls.add(meta.getOwningPlayer().getName());
+                                    dropperSkulls.add(meta.getOwner());
                                 }
                             } else {
                                 dropperBlocks.add(item.getType());
@@ -657,7 +657,7 @@ public class Adventure extends JavaPlugin implements Listener {
             Player player = isNearAnyPlayer(block);
             if (player == null) continue;
             final SpawnMob spawnMob = spawnMobs.get(block);
-            String command = String.format("minecraft:execute %s ~ ~ ~ summon %s %d %d %d %s",
+            String command = String.format("minecraft:execute at %s run summon %s %d %d %d %s",
                                            player.getUniqueId(),
                                            spawnMob.getId(),
                                            block.getX(), block.getY(), block.getZ(),
@@ -702,7 +702,7 @@ public class Adventure extends JavaPlugin implements Listener {
             BlockState state = block.getState();
             if (state instanceof Skull) {
                 Skull skull = (Skull)state;
-                String owner = skull.getOwningPlayer().getName();
+                String owner = skull.getOwner();
                 return owner != null && dropperSkulls.contains(owner);
             } else {
                 return false;
