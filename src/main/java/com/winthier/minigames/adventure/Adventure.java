@@ -68,6 +68,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -170,6 +171,7 @@ public class Adventure extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         db = new SQLDatabase(this);
+        getServer().getPluginManager().registerEvents(this, this);
         // Begin copy-pasted, modified
         ConfigurationSection gameConfig;
         ConfigurationSection worldConfig;
@@ -215,7 +217,6 @@ public class Adventure extends JavaPlugin implements Listener {
             }
         };
         tickTask.runTaskTimer(this, 1L, 1L);
-        getServer().getPluginManager().registerEvents(this, this);
         setupScoreboard();
         processChunkArea(world.getSpawnLocation().getChunk());
         startTime = new Date();
@@ -373,10 +374,12 @@ public class Adventure extends JavaPlugin implements Listener {
     void processChunk(int x, int z) {
         final ChunkCoord cc = new ChunkCoord(x, z);
         if (processedChunks.contains(cc)) return;
+        if (!world.isChunkLoaded(x, z)) return;
+        final Chunk chunk = world.getChunkAt(cc.getX(), cc.getZ());
+        if (!chunk.isLoaded()) return;
+        if (chunk.getTileEntities().length == 0) return;
         processedChunks.add(cc);
         // Process
-        final Chunk chunk = world.getChunkAt(cc.getX(), cc.getZ());
-        chunk.load();
         for (BlockState state : chunk.getTileEntities()) {
             if (state instanceof Skull) {
                 SpawnMob spawnMob = null;
@@ -968,7 +971,6 @@ public class Adventure extends JavaPlugin implements Listener {
             case SPRUCE_PRESSURE_PLATE:
             case STONE_PRESSURE_PLATE:
                 onPressurePlate(event.getPlayer(), event.getClickedBlock());
-                event.setCancelled(true);
                 break;
             default:
                 break;
@@ -1088,6 +1090,13 @@ public class Adventure extends JavaPlugin implements Listener {
                 }
             }
         }
+    }
+
+    @EventHandler
+    void onChunkLoad(ChunkLoadEvent event) {
+        if (world == null) return;
+        if (!world.equals(event.getWorld())) return;
+        processChunk(event.getChunk().getX(), event.getChunk().getZ());
     }
 
     void checkPortalBlock(final Block block, Set<Block> blocks, Set<Block> checked) {
