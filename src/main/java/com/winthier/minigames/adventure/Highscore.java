@@ -10,25 +10,30 @@ import lombok.RequiredArgsConstructor;
 import lombok.Value;
 
 @RequiredArgsConstructor
-public class Highscore {
+public final class Highscore {
     private final Adventure plugin;
-    @Value class Entry{ String name; int score; long time; }
-    List<Entry> list = null;
+    @Value
+    final class Entry {
+        String name;
+        int score;
+        long time;
+    }
+    protected List<Entry> list = null;
 
     public void init() {
         System.out.println("Setting up Adventure highscore");
         String sql =
-            "CREATE TABLE IF NOT EXISTS `Adventure` (" +
-            " `id` INT(11) NOT NULL AUTO_INCREMENT," +
-            " `player_uuid` VARCHAR(40) NOT NULL," +
-            " `player_name` VARCHAR(16) NOT NULL," +
-            " `map_id` VARCHAR(40) NOT NULL," +
-            " `start_time` DATETIME NOT NULL," +
-            " `end_time` DATETIME NOT NULL," +
-            " `score` INT(11) NOT NULL," +
-            " `finished` BOOLEAN NOT NULL," +
-            " PRIMARY KEY (`id`)" +
-            ")";
+            "CREATE TABLE IF NOT EXISTS `Adventure` ("
+            + " `id` INT(11) NOT NULL AUTO_INCREMENT,"
+            + " `player_uuid` VARCHAR(40) NOT NULL,"
+            + " `player_name` VARCHAR(16) NOT NULL,"
+            + " `map_id` VARCHAR(40) NOT NULL,"
+            + " `start_time` DATETIME NOT NULL,"
+            + " `end_time` DATETIME NOT NULL,"
+            + " `score` INT(11) NOT NULL,"
+            + " `finished` BOOLEAN NOT NULL,"
+            + " PRIMARY KEY (`id`)"
+            + ")";
         try {
             plugin.db.executeUpdate(sql);
         } catch (Exception e) {
@@ -38,11 +43,11 @@ public class Highscore {
 
     public void store(UUID playerUuid, String playerName, String mapID, Date startTime, Date endTime, int score, boolean finished) {
         String sql =
-            "INSERT INTO `Adventure` (" +
-            " `player_uuid`, `player_name`, `map_id`, `start_time`, `end_time`, `score`, `finished`" +
-            ") VALUES (" +
-            " ?, ?, ?, ?, ?, ?, ?" +
-            ")";
+            "INSERT INTO `Adventure` ("
+            + " `player_uuid`, `player_name`, `map_id`, `start_time`, `end_time`, `score`, `finished`"
+            + ") VALUES ("
+            + " ?, ?, ?, ?, ?, ?, ?"
+            + ")";
         try (PreparedStatement update = plugin.db.getConnection().prepareStatement(sql)) {
             update.setString(1, playerUuid.toString());
             update.setString(2, playerName);
@@ -57,8 +62,7 @@ public class Highscore {
         }
     }
 
-    List<Entry> list(String mapId)
-    {
+    protected List<Entry> list(String mapId) {
         if (list != null) return list;
         String sql =
             "SELECT * from Adventure WHERE map_id = ? AND finished = 1 ORDER BY score DESC, start_time ASC LIMIT 10";
