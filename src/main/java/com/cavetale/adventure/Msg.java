@@ -1,4 +1,4 @@
-package com.winthier.minigames.adventure;
+package com.cavetale.adventure;
 
 import java.util.Arrays;
 import java.util.HashMap;

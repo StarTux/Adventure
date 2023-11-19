@@ -4,7 +4,7 @@ authors: [ StarTux ]
 version: 0.1-SNAPSHOT
 api-version: 1.13
 website: https://cavetale.com
-main: com.winthier.minigames.adventure.Adventure
+main: com.cavetale.adventure.Adventure
 depend: [ SQL, Connect ]
 softdepend: []
 commands:

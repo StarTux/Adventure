@@ -1,4 +1,4 @@
-package com.winthier.minigames.adventure;
+package com.cavetale.adventure;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

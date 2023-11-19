@@ -1,4 +1,4 @@
-package com.winthier.minigames.adventure;
+package com.cavetale.adventure;
 
 import com.winthier.sql.SQLDatabase;
 import java.io.FileReader;
