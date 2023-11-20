@@ -1,7 +1,9 @@
 package com.cavetale.adventure;
 
-import com.winthier.sql.SQLDatabase;
-import java.io.FileReader;
+import com.cavetale.core.playercache.PlayerCache;
+import com.destroystokyo.paper.profile.PlayerProfile;
+import com.winthier.creative.BuildWorld;
+import com.winthier.creative.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -19,22 +21,18 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
+import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.WorldCreator;
-import org.bukkit.WorldType;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.Skull;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
@@ -42,9 +40,6 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
@@ -70,16 +65,16 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scoreboard.DisplaySlot;
-import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.Vector;
-import org.json.simple.JSONValue;
-import org.spigotmc.event.player.PlayerSpawnLocationEvent;
+import static com.cavetale.adventure.AdventurePlugin.plugin;
+import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.Component.textOfChildren;
+import static net.kyori.adventure.text.format.NamedTextColor.*;
+import static net.kyori.adventure.text.format.TextDecoration.*;
+import static net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText;
+import static net.kyori.adventure.title.Title.title;
 
-public final class Adventure extends JavaPlugin implements Listener {
+public final class Adventure {
     @Value
     static class ChunkCoord {
         int x;
@@ -93,7 +88,6 @@ public final class Adventure extends JavaPlugin implements Listener {
     interface Trigger {
         void call(Block block, Player player);
     }
-    // const
     static final String SIDEBAR_OBJECTIVE = "Sidebar";
     final List<String> mobList = Arrays.asList(
         "MHF_Blaze",
@@ -126,9 +120,10 @@ public final class Adventure extends JavaPlugin implements Listener {
         "MHF_Wolf",
         "MHF_Wither"
         );
-    // minigame stuf
+    // minigame stuff
+    protected String worldName;
     protected World world;
-    protected BukkitRunnable tickTask;
+    protected BuildWorld buildWorld;
     // chunk processing
     protected Set<ChunkCoord> processedChunks = new HashSet<>();
     protected Map<Block, SpawnMob> spawnMobs = new HashMap<>();
@@ -136,8 +131,6 @@ public final class Adventure extends JavaPlugin implements Listener {
     protected LivingEntity spawnedMob = null;
     protected boolean didSomeoneJoin = false;
     // level config
-    protected String mapId;
-    protected UUID gameId;
     protected boolean debug = false;
     protected final List<Location> spawns = new ArrayList<>();
     protected Location lookAt = null;
@@ -160,87 +153,54 @@ public final class Adventure extends JavaPlugin implements Listener {
     protected final Set<UUID> finished = new HashSet<>();
     protected final Set<UUID> joined = new HashSet<>();
     // score keeping
-    protected Scoreboard scoreboard;
-    protected final Highscore highscore = new Highscore(this);
     protected Date startTime;
     // state
     protected final Random random = new Random(System.currentTimeMillis());
     protected long ticks;
     protected long emptyTicks;
-    //
-    protected SQLDatabase db;
+    protected boolean obsolete = false;
 
-    // Setup event handlers
-
-    @Override
-    public void onEnable() {
-        db = new SQLDatabase(this);
-        getServer().getPluginManager().registerEvents(this, this);
-        // Begin copy-pasted, modified
-        ConfigurationSection gameConfig;
-        ConfigurationSection worldConfig;
-        try {
-            gameConfig = new YamlConfiguration().createSection("tmp", (Map<String, Object>) JSONValue.parse(new FileReader("game_config.json")));
-            worldConfig = YamlConfiguration.loadConfiguration(new FileReader("GameWorld/config.yml"));
-        } catch (Throwable t) {
-            t.printStackTrace();
-            getServer().shutdown();
-            return;
-        }
-        mapId = gameConfig.getString("map_id", mapId);
-        gameId = UUID.fromString(gameConfig.getString("unique_id"));
-        debug = gameConfig.getBoolean("debug", debug);
-
-        WorldCreator wc = WorldCreator.name("GameWorld");
-        wc.generator("VoidGenerator");
-        wc.type(WorldType.FLAT);
-        try {
-            wc.environment(World.Environment.valueOf(worldConfig.getString("world.Environment").toUpperCase()));
-        } catch (Throwable t) {
-            wc.environment(World.Environment.NORMAL);
-        }
-        world = wc.createWorld();
-        // End copy-pasted, modified
-
+    protected void enable() {
         world.setDifficulty(difficulty);
         world.setPVP(false);
-        world.setGameRuleValue("doTileDrops", "false");
-        world.setGameRuleValue("doMobLoot", "false");
-        world.setGameRuleValue("doDaylightCycle", "false");
-        world.setGameRuleValue("naturalRegeneration", "false");
-        world.setGameRuleValue("mobGriefing", "true");
+        world.setGameRule(GameRule.DO_TILE_DROPS, false);
+        world.setGameRule(GameRule.DO_MOB_LOOT, false);
+        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
+        world.setGameRule(GameRule.NATURAL_REGENERATION, false);
+        world.setGameRule(GameRule.MOB_GRIEFING, true);
+        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 0);
         if (ticks % 20L == 0L) {
             world.setTime(18000);
             world.setStorm(false);
             world.setThundering(false);
             world.setWeatherDuration(99999);
         }
-        this.tickTask = new BukkitRunnable() {
-            @Override public void run() {
-                onTick();
-            }
-        };
-        tickTask.runTaskTimer(this, 1L, 1L);
-        setupScoreboard();
         processChunkArea(world.getSpawnLocation().getChunk());
         startTime = new Date();
-        highscore.init();
+    }
+
+    protected void disable() {
+        obsolete = true; // Should already be set!
+        for (Player player : world.getPlayers()) {
+            leavePlayer(player);
+        }
+        Files.deleteWorld(world);
     }
 
     protected void onTick() {
         final long currentTicks = this.ticks++;
-        if (didSomeoneJoin && getServer().getOnlinePlayers().isEmpty()) {
-            getServer().shutdown();
+        if (didSomeoneJoin && world.getPlayers().isEmpty()) {
+            obsolete = true;
             return;
         }
         if (currentTicks >= 1200L) {
             if (!didSomeoneJoin) {
-                getServer().shutdown();
+                obsolete = true;
                 return;
-            } else if (getServer().getOnlinePlayers().isEmpty()) {
+            } else if (world.getPlayers().isEmpty()) {
                 final long currentEmptyTicks = this.emptyTicks++;
                 if (currentEmptyTicks >= 1200L) {
-                    getServer().shutdown();
+                    obsolete = true;
                     return;
                 }
             } else {
@@ -257,27 +217,18 @@ public final class Adventure extends JavaPlugin implements Listener {
         didSomeoneJoin = this.didSomeoneJoin;
         this.didSomeoneJoin = true;
         player.setGameMode(GameMode.ADVENTURE);
-        player.setScoreboard(scoreboard);
         if (exitItem != null) player.getInventory().setItem(8, exitItem.clone());
         for (ItemStack kitItem : kit) player.getInventory().addItem(kitItem.clone());
         if (!didSomeoneJoin) startTime = new Date();
-        new BukkitRunnable() {
-            @Override public void run() {
-                if (player.isValid()) {
-                    player.sendMessage("");
-                    showHighscore(player);
-                    player.sendMessage("");
-                    showCredits(player);
-                    player.sendMessage("");
-                }
-            }
-        }.runTaskLater(this, 20 * 5);
-    }
-
-    @EventHandler
-    public void onPlayerSpawnLocation(PlayerSpawnLocationEvent event) {
-        if (joined.contains(event.getPlayer().getUniqueId())) return;
-        event.setSpawnLocation(getSpawnLocation(event.getPlayer()));
+        Bukkit.getScheduler().runTaskLater(plugin(), () -> {
+                if (obsolete) return;
+                if (!player.isValid() || !player.getWorld().equals(world)) return;
+                player.sendMessage("");
+                showHighscore(player);
+                player.sendMessage("");
+                showCredits(player);
+                player.sendMessage("");
+            }, 20L * 5L);
     }
 
     public Location getSpawnLocation(Player player) {
@@ -295,31 +246,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         return spawn;
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command bcommand, String command, String[] args) {
-        if (!(sender instanceof Player)) return true;
-        Player player = (Player) sender;
-        if ("quit".equals(command)) {
-            leavePlayer(player);
-        } else if ("finish".equals(command)) {
-            if (!player.isOp()) return false;
-            setFinished(player.getUniqueId());
-            recordPlayerScore(player);
-            if (winLocation != null) player.teleport(winLocation);
-            winCounters.put(player.getUniqueId(), 0);
-            player.getInventory().setItem(8, exitItem.clone());
-            player.getInventory().clear();
-        } else if ("item".equals(command)) {
-            if (!player.isOp()) return false;
-            randomDrop(player.getLocation());
-        } else if (command.equalsIgnoreCase("highscore") || command.equalsIgnoreCase("hi")) {
-            showHighscore(player);
-        } else {
-            return false;
-        }
-        return true;
-    }
-
     protected void processWinners() {
         final List<UUID> removePlayers = new ArrayList<>();
         for (UUID uuid : winCounters.keySet()) {
@@ -332,14 +258,16 @@ public final class Adventure extends JavaPlugin implements Listener {
             winCounters.put(uuid, counter + 1);
             switch (counter) {
             case 20:
-                Msg.sendTitle(player, "&9Congratulations", String.format("&9You completed the %s adventure", mapId)); // TODO name
+                player.showTitle(title(text("Congratulations", BLUE),
+                                       text("You completed " + buildWorld.getName(), BLUE)));
                 break;
             case 200: {
                 if (!credits.isEmpty()) {
                     StringBuilder sb = new StringBuilder("&9");
                     sb.append(credits.get(0));
                     for (int i = 1; i < credits.size(); ++i) sb.append(" ").append(credits.get(i));
-                    Msg.sendTitle(player, "&9Map created by", sb.toString());
+                    player.showTitle(title(text("Map created by", BLUE),
+                                           text(sb.toString(), BLUE)));
                 }
                 break;
             }
@@ -355,7 +283,7 @@ public final class Adventure extends JavaPlugin implements Listener {
     }
 
     protected void processPlayerChunks() {
-        for (Player player : getServer().getOnlinePlayers()) {
+        for (Player player : world.getPlayers()) {
             Chunk chunk = player.getLocation().getChunk();
             processChunkArea(chunk.getX(), chunk.getZ());
         }
@@ -386,94 +314,92 @@ public final class Adventure extends JavaPlugin implements Listener {
         processedChunks.add(cc);
         // Process
         for (BlockState state : chunk.getTileEntities()) {
-            if (state instanceof Skull) {
-                SpawnMob spawnMob = null;
-                final Skull skull = (Skull) state;
-                if (skull.hasOwner()) {
-                    String owner = skull.getOwner();
-                    if ("MHF_Skeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
-                    } else if ("MHF_WSkeleton".equals(owner)) {
-                        spawnMob = new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword,Count:1},{}]}");
-                    } else if ("MHF_PigZombie".equals(owner)) {
-                        spawnMob = new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword,Count:1},{}]}");
-                    } else if ("MHF_Golem".equals(owner)) {
-                        spawnMob = new SpawnMob("villager_golem", "{}");
-                    } else if ("MHF_KillerRabbit".equals(owner)) {
-                        spawnMob = new SpawnMob("rabbit", "{RabbitType:99}");
-                    } else if ("MHF_Bunny".equals(owner)) {
-                        spawnMob = new SpawnMob("rabbit", "{}");
-                    } else if ("MHF_SnowGolem".equals(owner)) {
-                        spawnMob = new SpawnMob("snowman", "{}");
-                    } else if ("MHF_Wither".equals(owner)) {
-                        spawnMob = new SpawnMob("wither", "{}");
-                    } else if ("MHF_Ocelot".equals(owner)) {
-                        spawnMob = new SpawnMob("ocelot", "{}");
-                    } else if ("MHF_CaveSpider".equals(owner)) {
-                        spawnMob = new SpawnMob("cave_spider", "{}");
-                    } else if ("MHF_EnderDragon".equals(owner)) {
-                        spawnMob = new SpawnMob("ender_dragon", "{}");
-                    } else if ("MHF_LavaSlime".equals(owner)) {
-                        spawnMob = new SpawnMob("magma_cube", "{}");
-                    } else if ("MHF_MushroomCow".equals(owner)) {
-                        spawnMob = new SpawnMob("mooshroom", "{}");
-                    } else if (mobList.contains(owner)) {
-                        spawnMob = new SpawnMob(owner.substring(4).toLowerCase(), "{}");
-                    }
-                }
+            if (state instanceof Skull skull) {
+                final PlayerProfile playerProfile = skull.getPlayerProfile();
+                if (playerProfile == null) continue;
+                final String owner = playerProfile.getName();
+                if (owner == null) continue;
+                final SpawnMob spawnMob = switch (owner) {
+                case "MHF_Skeleton" -> new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
+                case "MHF_WSkeleton" -> new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword,Count:1},{}]}");
+                case "MHF_PigZombie" -> new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword,Count:1},{}]}");
+                case "MHF_Golem" -> new SpawnMob("villager_golem", "{}");
+                case "MHF_KillerRabbit" -> new SpawnMob("rabbit", "{RabbitType:99}");
+                case "MHF_Bunny" -> new SpawnMob("rabbit", "{}");
+                case "MHF_SnowGolem" -> new SpawnMob("snowman", "{}");
+                case "MHF_Wither" -> new SpawnMob("wither", "{}");
+                case "MHF_Ocelot" -> new SpawnMob("ocelot", "{}");
+                case "MHF_CaveSpider" -> new SpawnMob("cave_spider", "{}");
+                case "MHF_EnderDragon" -> new SpawnMob("ender_dragon", "{}");
+                case "MHF_LavaSlime" -> new SpawnMob("magma_cube", "{}");
+                case "MHF_MushroomCow" -> new SpawnMob("mooshroom", "{}");
+                default -> mobList.contains(owner) ? new SpawnMob(owner.substring(4).toLowerCase(), "{}") : null;
+                };
                 if (spawnMob != null) {
                     spawnMobs.put(state.getBlock(), spawnMob);
                     state.getBlock().setType(Material.AIR);
                 }
             } else if (state instanceof Chest chest) {
                 final Inventory inv = chest.getInventory();
-                String name = chest.getCustomName();
+                if (chest.customName() == null) continue;
+                final String name = plainText().serialize(chest.customName()).toLowerCase();
                 boolean removeThis = true;
-                if ("[droppers]".equals(name)) {
+                switch (name) {
+                case "[droppers]": {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
-                            if (item.getType() == Material.PLAYER_HEAD) {
-                                SkullMeta meta = (SkullMeta) item.getItemMeta();
-                                String owner = meta.getOwner();
-                                if (owner != null) {
-                                    dropperSkulls.add(meta.getOwner());
-                                }
+                            if (item.getType() == Material.PLAYER_HEAD && item.getItemMeta() instanceof SkullMeta meta) {
+                                final PlayerProfile playerProfile = meta.getPlayerProfile();
+                                if (playerProfile == null) continue;
+                                final String owner = playerProfile.getName();
+                                if (owner == null) continue;
+                                dropperSkulls.add(owner);
                             } else {
                                 dropperBlocks.add(item.getType());
                             }
                         }
                     }
                     inv.clear();
-                } else if ("[drops]".equals(name)) {
+                    break;
+                }
+                case "[drops]": {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             drops.add(item.clone());
                         }
                     }
                     inv.clear();
-                } else if ("[kit]".equals(name)) {
+                    break;
+                }
+                case "[kit]": {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             kit.add(item.clone());
                         }
                     }
                     inv.clear();
-                } else if ("[exit]".equals(name)) {
+                    break;
+                }
+                case "[exit]": {
                     for (ItemStack item : inv.getContents()) {
                         if (item != null) {
                             this.exitItem = item.clone();
                         }
                     }
                     inv.clear();
-                } else if ("[win]".equals(name)) {
+                    break;
+                }
+                case "[win]": {
                     this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
-                } else {
+                    break;
+                }
+                default:
                     removeThis = false;
+                    break;
                 }
                 if (removeThis) state.getBlock().setType(Material.AIR);
-            } else if (state instanceof Sign) {
-                final Sign sign = (Sign) state;
-                String firstLine = sign.getLine(0).toLowerCase();
+            } else if (state instanceof Sign sign) {
+                String firstLine = plainText().serialize(sign.getSide(Side.FRONT).line(0)).toLowerCase();
                 boolean removeThis = true;
                 if (firstLine != null && firstLine.startsWith("[") && firstLine.endsWith("]")) {
                     if ("[spawn]".equals(firstLine)) {
@@ -482,7 +408,7 @@ public final class Adventure extends JavaPlugin implements Listener {
                         this.lookAt = state.getLocation().add(0.5, 0.0, 0.5);
                     } else if ("[time]".equals(firstLine)) {
                         long time = 0;
-                        String arg = sign.getLine(1).toLowerCase();
+                        String arg = plainText().serialize(sign.getSide(Side.FRONT).line(1)).toLowerCase();
                         if ("day".equals(arg)) {
                             time = 1000;
                         } else if ("night".equals(arg)) {
@@ -493,28 +419,28 @@ public final class Adventure extends JavaPlugin implements Listener {
                             time = 18000;
                         } else {
                             try {
-                                time = Long.parseLong(sign.getLine(1));
+                                time = Long.parseLong(plainText().serialize(sign.getSide(Side.FRONT).line(1)));
                             } catch (NumberFormatException nfe) { }
                         }
                         world.setTime(time);
-                        if ("lock".equalsIgnoreCase(sign.getLine(2))) {
-                            world.setGameRuleValue("doDaylightCycle", "false");
+                        if ("lock".equalsIgnoreCase(plainText().serialize(sign.getSide(Side.FRONT).line(2)))) {
+                            world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
                         } else {
-                            world.setGameRuleValue("doDaylightCycle", "true");
+                            world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
                         }
                     } else if ("[weather]".equals(firstLine)) {
                         int duration = 60;
-                        if (!sign.getLine(2).isEmpty()) {
-                            String arg = sign.getLine(2).toLowerCase();
+                        if (!plainText().serialize(sign.getSide(Side.FRONT).line(2)).isEmpty()) {
+                            String arg = plainText().serialize(sign.getSide(Side.FRONT).line(2)).toLowerCase();
                             if ("lock".equals(arg)) {
                                 duration = 99999;
                             } else {
                                 try {
-                                    duration = Integer.parseInt(sign.getLine(2));
+                                    duration = Integer.parseInt(plainText().serialize(sign.getSide(Side.FRONT).line(2)));
                                 } catch (NumberFormatException nfe) { }
                             }
                         }
-                        String weather = sign.getLine(1).toLowerCase();
+                        String weather = plainText().serialize(sign.getSide(Side.FRONT).line(1)).toLowerCase();
                         if ("clear".equals(weather)) {
                             world.setStorm(false);
                             world.setThundering(false);
@@ -528,7 +454,7 @@ public final class Adventure extends JavaPlugin implements Listener {
                         world.setWeatherDuration(duration * 20);
                     } else if ("[options]".equals(firstLine)) {
                         for (int i = 1; i < 4; ++i) {
-                            String line = sign.getLine(i);
+                            String line = plainText().serialize(sign.getSide(Side.FRONT).line(i));
                             if ("LockArmorStands".equalsIgnoreCase(line)) {
                                 lockedEntities.add(EntityType.ARMOR_STAND);
                             } else if ("LockItemFrames".equalsIgnoreCase(line)) {
@@ -536,16 +462,16 @@ public final class Adventure extends JavaPlugin implements Listener {
                             } else if ("LockPaintings".equalsIgnoreCase(line)) {
                                 lockedEntities.add(EntityType.PAINTING);
                             } else if ("NoFireTick".equalsIgnoreCase(line)) {
-                                world.setGameRuleValue("doFireTick", "false");
+                                world.setGameRule(GameRule.DO_FIRE_TICK, false);
                             } else if ("NoMobGriefing".equalsIgnoreCase(line)) {
-                                world.setGameRuleValue("mobGriefing", "false");
+                                world.setGameRule(GameRule.MOB_GRIEFING, false);
                             }
                         }
                     } else if (firstLine.equals("[win]")) {
                         this.winLocation = state.getBlock().getLocation().add(0.5, 0.0, 0.5);
                     } else if (firstLine.equals("[credits]")) {
                         for (int i = 1; i < 4; ++i) {
-                            String credit = sign.getLine(i);
+                            String credit = plainText().serialize(sign.getSide(Side.FRONT).line(i));
                             if (credit != null) credits.add(credit);
                         }
                     } else if (firstLine.equals("[finish]")) {
@@ -560,7 +486,7 @@ public final class Adventure extends JavaPlugin implements Listener {
                             }
                         });
                     } else if (firstLine.equals("[teleport]")) {
-                        String[] tokens = sign.getLine(1).split(" ");
+                        String[] tokens = plainText().serialize(sign.getSide(Side.FRONT).line(1)).split(" ");
                         if (tokens.length == 3) {
                             final int[] coords = new int[3];
                             coords[0] = state.getX();
@@ -581,7 +507,7 @@ public final class Adventure extends JavaPlugin implements Listener {
                                         coords[i] = val;
                                     }
                                 } catch (NumberFormatException nfe) {
-                                    getLogger().warning(String.format("Bad teleport sign at %d,%d,%d: Number expected, got %s", state.getX(), state.getY(), state.getZ(), token));
+                                    plugin().getLogger().warning(String.format("Bad teleport sign at %d,%d,%d: Number expected, got %s", state.getX(), state.getY(), state.getZ(), token));
                                 }
                             }
                             triggers.put(state.getBlock(), new Trigger() {
@@ -594,20 +520,29 @@ public final class Adventure extends JavaPlugin implements Listener {
                                 }
                             });
                         } else {
-                            getLogger().warning(String.format("Bad teleport sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
+                            plugin().getLogger().warning(String.format("Bad teleport sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
                     } else if (firstLine.equals("[difficulty]")) {
                         try {
-                            this.difficulty = Difficulty.valueOf(sign.getLine(1).toUpperCase());
+                            this.difficulty = Difficulty.valueOf(plainText().serialize(sign.getSide(Side.FRONT).line(1)).toUpperCase());
                             world.setDifficulty(this.difficulty);
-                            getLogger().info("Set difficulty to " + this.difficulty);
+                            plugin().getLogger().info("Set difficulty to " + this.difficulty);
                         } catch (IllegalArgumentException iae) {
-                            getLogger().warning(String.format("Bad difficulty sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
+                            plugin().getLogger().warning(String.format("Bad difficulty sign at %d,%d,%d", state.getX(), state.getY(), state.getZ()));
                         }
                     } else if (firstLine.equals("[lock]")) {
-                        String lockName = sign.getLine(1) + sign.getLine(2) + sign.getLine(3);
-                        Block attachedBlock = sign.getBlock().getRelative(((org.bukkit.material.Sign) sign.getData()).getAttachedFace());
-                        Material mat = attachedBlock.getType();
+                        final String lockName = plainText().serialize(sign.getSide(Side.FRONT).line(1))
+                            + plainText().serialize(sign.getSide(Side.FRONT).line(2))
+                            + plainText().serialize(sign.getSide(Side.FRONT).line(3));
+                        final Block attachedBlock;
+                        if (sign.getBlock().getBlockData() instanceof org.bukkit.block.data.type.Sign) {
+                            attachedBlock = sign.getBlock().getRelative(BlockFace.DOWN);
+                        } else if (sign.getBlock().getBlockData() instanceof org.bukkit.block.data.type.WallSign wallSign) {
+                            attachedBlock = sign.getBlock().getRelative(wallSign.getFacing().getOppositeFace());
+                        } else {
+                            continue;
+                        }
+                        final Material mat = attachedBlock.getType();
                         LinkedList<Block> blocksToSearch = new LinkedList<>();
                         blocksToSearch.add(attachedBlock);
                         Set<Block> blocksSearched = new HashSet<>();
@@ -628,7 +563,7 @@ public final class Adventure extends JavaPlugin implements Listener {
                         }
                         for (Block block : result) lockedBlocks.put(block, lockName);
                     } else {
-                        getLogger().warning("Unrecognized sign: " + firstLine);
+                        plugin().getLogger().warning("Unrecognized sign: " + firstLine);
                         removeThis = false;
                     }
                     if (removeThis) state.getBlock().setType(Material.AIR);
@@ -640,7 +575,7 @@ public final class Adventure extends JavaPlugin implements Listener {
     protected Player isNearAnyPlayer(Block block) {
         final int radius = 16;
         final int vradius = 8;
-        for (Player player : getServer().getOnlinePlayers()) {
+        for (Player player : world.getPlayers()) {
             final int px;
             final int py;
             final int pz;
@@ -674,7 +609,8 @@ public final class Adventure extends JavaPlugin implements Listener {
                                            spawnMob.getTagData() != null ? spawnMob.getTagData() : "");
             expectMob = true;
             try {
-                Msg.consoleCommand(command);
+                plugin().getLogger().info("Executing console command: " + command);
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
             } catch (Exception e) {
                 e.printStackTrace();
                 expectMob = false;
@@ -683,11 +619,11 @@ public final class Adventure extends JavaPlugin implements Listener {
             if (spawnedMob != null) {
                 spawnedMob.setRemoveWhenFarAway(false);
                 spawnedMob.setCanPickupItems(false);
-                getLogger().info("Mob spawned: " + spawnedMob.getType() + " " + spawnMob.getId() + " " + spawnMob.getTagData());
+                plugin().getLogger().info("Mob spawned: " + spawnedMob.getType() + " " + spawnMob.getId() + " " + spawnMob.getTagData());
                 spawnedMob = null;
                 removeBlocks.add(block);
             } else {
-                getLogger().warning("Mob did not spawn: " + spawnMob.getId() + " " + spawnMob.getTagData());
+                plugin().getLogger().warning("Mob did not spawn: " + spawnMob.getId() + " " + spawnMob.getTagData());
             }
         }
         for (Block block : removeBlocks) spawnMobs.remove(block);
@@ -709,13 +645,12 @@ public final class Adventure extends JavaPlugin implements Listener {
     protected boolean isDropper(Block block) {
         if (block.getType() == Material.PLAYER_HEAD) {
             BlockState state = block.getState();
-            if (state instanceof Skull) {
-                Skull skull = (Skull) state;
-                String owner = skull.getOwner();
-                return owner != null && dropperSkulls.contains(owner);
-            } else {
-                return false;
-            }
+            if (!(state instanceof Skull skull)) return false;
+            final PlayerProfile playerProfile = skull.getPlayerProfile();
+            if (playerProfile == null) return false;
+            final String owner = playerProfile.getName();
+            if (owner == null) return false;
+            return dropperSkulls.contains(owner);
         } else {
             return dropperBlocks.contains(block.getType());
         }
@@ -726,13 +661,6 @@ public final class Adventure extends JavaPlugin implements Listener {
             if (drop.isSimilar(item)) return true;
         }
         return false;
-    }
-
-    protected void setupScoreboard() {
-        scoreboard = getServer().getScoreboardManager().getNewScoreboard();
-        Objective objective = scoreboard.registerNewObjective(SIDEBAR_OBJECTIVE, "dummy", "Dummy");
-        objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-        objective.setDisplayName(Msg.format("&9Score"));
     }
 
     protected int getPlayerScore(Player player) {
@@ -746,9 +674,7 @@ public final class Adventure extends JavaPlugin implements Listener {
     }
 
     protected void setPlayerScore(Player player, int score) {
-        if (setPlayerScore(player.getUniqueId(), score)) {
-            scoreboard.getObjective(SIDEBAR_OBJECTIVE).getScore(player.getName()).setScore(score);
-        }
+        setPlayerScore(player.getUniqueId(), score);
     }
 
     protected boolean setPlayerScore(UUID uuid, int score) {
@@ -772,7 +698,7 @@ public final class Adventure extends JavaPlugin implements Listener {
     }
 
     protected void countPlayerScores() {
-        for (Player player : getServer().getOnlinePlayers()) {
+        for (Player player : world.getPlayers()) {
             if (playersOutOfTheGame.contains(player.getUniqueId())) continue;
             int score = countPlayerScore(player);
             setPlayerScore(player, score);
@@ -787,16 +713,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         finished.add(uuid);
     }
 
-    private ConfigurationSection fixRewardConfig(ConfigurationSection config) {
-        if (config == null) return null;
-        if (config.isSet("Daily")) {
-            String val = config.getString("Daily");
-            val = val.replace("%map%", mapId);
-            config.set("Daily", val);
-        }
-        return config;
-    }
-
     protected void recordPlayerScore(Player player) {
         if (debug) return;
         if (playersOutOfTheGame.contains(player.getUniqueId())) return;
@@ -804,32 +720,27 @@ public final class Adventure extends JavaPlugin implements Listener {
         player.getInventory().clear();
         final int score = getPlayerScore(player);
         final boolean hasFinished = hasFinished(player.getUniqueId());
-        highscore.store(player.getUniqueId(), player.getName(), mapId, startTime, new Date(), score, hasFinished);
+        SQLMapFinish.insert(player.getUniqueId(), buildWorld.getPath(), startTime, new Date(), score, hasFinished);
     }
 
     // Event Handlers
 
-    @EventHandler(ignoreCancelled = true)
     public void onBlockFade(BlockFadeEvent event) {
         event.setCancelled(true);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onBlockGrow(BlockGrowEvent event) {
         event.setCancelled(true);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onBlockForm(BlockFormEvent event) {
         event.setCancelled(true);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onBlockSpread(BlockSpreadEvent event) {
         event.setCancelled(true);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
         final List<Block> addBlocks = new ArrayList<>();
         event.setYield(0.0f);
@@ -847,7 +758,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         addBlocks.clear();
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityDeath(EntityDeathEvent event) {
         final LivingEntity entity = event.getEntity();
         event.setDroppedExp(0);
@@ -860,32 +770,24 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerDeath(PlayerDeathEvent event) {
         final Player player = event.getEntity();
         event.getDrops().clear();
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
-        new BukkitRunnable() {
-            @Override public void run() {
-                leavePlayer(player);
-            }
-        }.runTaskLater(this, 20L);
+        Bukkit.getScheduler().runTaskLater(plugin(), () -> leavePlayer(player), 20L);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         leavePlayer(event.getPlayer());
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityRegainHealth(EntityRegainHealthEvent event) {
         if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED) {
             event.setCancelled(true);
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
         final Player player = event.getPlayer();
         final UUID uuid = player.getUniqueId();
@@ -897,10 +799,8 @@ public final class Adventure extends JavaPlugin implements Listener {
             leavePlayer(player);
             return;
         }
-        player.setScoreboard(scoreboard);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityPickupItem(EntityPickupItemEvent event) {
         if (!(event.getEntity() instanceof Player)) return;
         if (!isDroppedItem(event.getItem().getItemStack())) return;
@@ -917,7 +817,8 @@ public final class Adventure extends JavaPlugin implements Listener {
         if (item == null || item.getType() == Material.AIR) return false;
         ItemMeta meta = item.getItemMeta();
         if (meta == null || !meta.hasDisplayName()) return false;
-        return lockName.equals(meta.getDisplayName());
+        final String displayName = plainText().serialize(meta.displayName());
+        return lockName.equals(displayName);
     }
 
     protected boolean playerHoldsExitItem(Player player) {
@@ -930,7 +831,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         return exitItem.isSimilar(item);
     }
 
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
     public void onPlayerInteractLock(PlayerInteractEvent event) {
         switch (event.getAction()) {
         case LEFT_CLICK_BLOCK: break;
@@ -946,7 +846,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         block.getWorld().playSound(block.getLocation().add(.5, .5, .5), Sound.BLOCK_WOODEN_DOOR_CLOSE, 1, 1);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractDropper(PlayerInteractEvent event) {
         switch (event.getAction()) {
         case LEFT_CLICK_BLOCK:
@@ -961,7 +860,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         final Block block = event.getClickedBlock();
         switch (event.getAction()) {
@@ -1017,7 +915,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         final Player player = event.getPlayer();
         if (playerHoldsExitItem(player)) {
@@ -1028,7 +925,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         onClickEntity(player, event.getRightClicked(), event);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractAtEntity(PlayerInteractAtEntityEvent event) {
         final Player player = event.getPlayer();
         if (playerHoldsExitItem(player)) {
@@ -1039,14 +935,12 @@ public final class Adventure extends JavaPlugin implements Listener {
         onClickEntity(player, event.getRightClicked(), event);
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player) {
             onClickEntity((Player) event.getDamager(), event.getEntity(), event);
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onHangingBreak(HangingBreakEvent event) {
         if (lockedEntities.contains(event.getEntity().getType())) {
             event.setCancelled(true);
@@ -1054,11 +948,9 @@ public final class Adventure extends JavaPlugin implements Listener {
     }
 
     public void leavePlayer(Player player) {
-        recordPlayerScore(player);
-        player.kickPlayer("Leaving");
+        player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         if (expectMob) {
             spawnedMob = (LivingEntity) event.getEntity();
@@ -1071,7 +963,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
     public void onEntityPortal(EntityPortalEvent event) {
         event.setCancelled(true);
         if (event.getEntity() instanceof org.bukkit.entity.Projectile) {
@@ -1088,7 +979,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         BlockFace.DOWN
     };
 
-    @EventHandler(ignoreCancelled = true)
     public void onPlayerPortal(PlayerPortalEvent event) {
         if (event.getCause() != PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) return;
         event.setCancelled(true);
@@ -1104,7 +994,6 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler
     protected void onChunkLoad(ChunkLoadEvent event) {
         if (world == null) return;
         if (!world.equals(event.getWorld())) return;
@@ -1165,26 +1054,32 @@ public final class Adventure extends JavaPlugin implements Listener {
         }
     }
 
-    protected void showHighscore(Player player, List<Highscore.Entry> entries) {
+    protected void showHighscore(Player player, List<SQLMapFinish> rows) {
         int i = 1;
-        Msg.send(player, "&b&l" + mapId + " Highscore");
-        Msg.send(player, "&3Rank &fScore &3Time &fName");
-        for (Highscore.Entry entry : entries) {
-            long seconds = entry.getTime() / 1000;
+        player.sendMessage(text(buildWorld.getName() + " Highscore", BLUE, BOLD));
+        player.sendMessage(textOfChildren(text("Rank", DARK_AQUA),
+                                          text(" Score", WHITE),
+                                          text(" Time", DARK_AQUA),
+                                          text(" Name", WHITE)));
+        for (SQLMapFinish row : rows) {
+            long seconds = row.getDuration() / 1000;
             long minutes = seconds / 60;
             long hours = minutes / 60;
-            Msg.send(player, "&3#%02d &f%d &3%02d&f:&3%02d&f:&3%02d &f%s", i++, entry.getScore(), hours, minutes % 60, seconds % 60, entry.getName());
+            player.sendMessage(textOfChildren(text("" + i, DARK_AQUA),
+                                              text(" " + row.getScore(), WHITE),
+                                              text(" " + hours + "h " + (minutes % 60) + "m " + (seconds % 60) + "s", DARK_AQUA),
+                                              text(PlayerCache.nameForUuid(row.getPlayer()), WHITE)));
         }
     }
 
     protected void showHighscore(Player player) {
-        List<Highscore.Entry> entries = highscore.list(mapId);
-        showHighscore(player, entries);
+        List<SQLMapFinish> rows = SQLMapFinish.listForMap(buildWorld.getPath());
+        showHighscore(player, rows);
     }
 
     protected void showCredits(Player player) {
         StringBuilder sb = new StringBuilder();
         for (String credit : credits) sb.append(" ").append(credit);
-        Msg.send(player, "&b&l%s&r built by&b%s", mapId, sb.toString());
+        player.sendMessage(text(buildWorld.getName() + " built by " + sb.toString(), BLUE));
     }
 }

@@ -5,9 +5,9 @@ version: 0.1-SNAPSHOT
 api-version: 1.13
 website: https://cavetale.com
 main: com.cavetale.adventure.Adventure
-depend: [ SQL, Connect ]
+depend: [Core, SQL, Creative]
 softdepend: []
 commands:
-  colorfall:
+  adventure:
     aliases: [highscore, hi, quit]
 permissions: {}
