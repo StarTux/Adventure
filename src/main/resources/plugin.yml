@@ -1,13 +1,34 @@
+main: com.cavetale.adventure.AdventurePlugin
+
 name: Adventure
-description: Adventure Map Engins
-authors: [ StarTux ]
 version: 0.1-SNAPSHOT
-api-version: 1.13
-website: https://cavetale.com
-main: com.cavetale.adventure.Adventure
+description: Adventure Map Engins
+api-version: '1.20'
+
+author: StarTux
+website: https://github.com/StarTux/Adventure
+
 depend: [Core, SQL, Creative]
 softdepend: []
+
 commands:
+
   adventure:
-    aliases: [highscore, hi, quit]
-permissions: {}
+    aliases: [adv]
+    description: Player command
+    permission: adventure.adventure
+
+  adventureadmin:
+    aliases: [advadm]
+    description: Admin command
+    permission: adventure.admin
+
+permissions:
+
+  adventure.adventure:
+    description: Use /adv
+    default: op
+
+  adventure.admin:
+    description: Use /advadm
+    default: op
