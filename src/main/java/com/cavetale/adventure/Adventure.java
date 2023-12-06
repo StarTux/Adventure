@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import lombok.Getter;
 import lombok.Value;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -56,7 +57,6 @@ import org.bukkit.event.hanging.HangingBreakEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -74,6 +74,7 @@ import static net.kyori.adventure.text.format.TextDecoration.*;
 import static net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText;
 import static net.kyori.adventure.title.Title.title;
 
+@Getter
 public final class Adventure {
     @Value
     static class ChunkCoord {
@@ -121,7 +122,6 @@ public final class Adventure {
         "MHF_Wither"
         );
     // minigame stuff
-    protected String worldName;
     protected World world;
     protected BuildWorld buildWorld;
     // chunk processing
@@ -129,7 +129,6 @@ public final class Adventure {
     protected Map<Block, SpawnMob> spawnMobs = new HashMap<>();
     protected boolean expectMob = false;
     protected LivingEntity spawnedMob = null;
-    protected boolean didSomeoneJoin = false;
     // level config
     protected boolean debug = false;
     protected final List<Location> spawns = new ArrayList<>();
@@ -160,6 +159,11 @@ public final class Adventure {
     protected long emptyTicks;
     protected boolean obsolete = false;
 
+    public Adventure(final World world, final BuildWorld buildWorld) {
+        this.world = world;
+        this.buildWorld = buildWorld;
+    }
+
     protected void enable() {
         world.setDifficulty(difficulty);
         world.setPVP(false);
@@ -189,23 +193,14 @@ public final class Adventure {
 
     protected void onTick() {
         final long currentTicks = this.ticks++;
-        if (didSomeoneJoin && world.getPlayers().isEmpty()) {
-            obsolete = true;
-            return;
-        }
-        if (currentTicks >= 1200L) {
-            if (!didSomeoneJoin) {
+        if (currentTicks >= 20L && world.getPlayers().isEmpty()) {
+            final long currentEmptyTicks = this.emptyTicks++;
+            if (currentEmptyTicks >= 1200L) {
                 obsolete = true;
                 return;
-            } else if (world.getPlayers().isEmpty()) {
-                final long currentEmptyTicks = this.emptyTicks++;
-                if (currentEmptyTicks >= 1200L) {
-                    obsolete = true;
-                    return;
-                }
-            } else {
-                emptyTicks = 0L;
             }
+        } else {
+            emptyTicks = 0L;
         }
         processPlayerChunks();
         processSpawnMobs();
@@ -213,13 +208,28 @@ public final class Adventure {
         countPlayerScores();
     }
 
+    /**
+     * Joins and rejoins.
+     */
+    public void onPlayerJoin(Player player) {
+        final UUID uuid = player.getUniqueId();
+        if (!joined.contains(uuid)) {
+            joined.add(uuid);
+            onPlayerReady(player);
+        }
+        if (playersOutOfTheGame.contains(uuid)) {
+            leavePlayer(player);
+            return;
+        }
+    }
+
+    /**
+     * First time join.
+     */
     public void onPlayerReady(Player player) {
-        didSomeoneJoin = this.didSomeoneJoin;
-        this.didSomeoneJoin = true;
-        player.setGameMode(GameMode.ADVENTURE);
+        resetPlayer(player);
         if (exitItem != null) player.getInventory().setItem(8, exitItem.clone());
         for (ItemStack kitItem : kit) player.getInventory().addItem(kitItem.clone());
-        if (!didSomeoneJoin) startTime = new Date();
         Bukkit.getScheduler().runTaskLater(plugin(), () -> {
                 if (obsolete) return;
                 if (!player.isValid() || !player.getWorld().equals(world)) return;
@@ -231,7 +241,7 @@ public final class Adventure {
             }, 20L * 5L);
     }
 
-    public Location getSpawnLocation(Player player) {
+    public Location getSpawnLocation() {
         Location spawn;
         if (spawns.isEmpty()) {
             spawn = world.getSpawnLocation();
@@ -774,7 +784,6 @@ public final class Adventure {
         final Player player = event.getEntity();
         event.getDrops().clear();
         player.getInventory().clear();
-        player.setGameMode(GameMode.SPECTATOR);
         Bukkit.getScheduler().runTaskLater(plugin(), () -> leavePlayer(player), 20L);
     }
 
@@ -785,19 +794,6 @@ public final class Adventure {
     public void onEntityRegainHealth(EntityRegainHealthEvent event) {
         if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED) {
             event.setCancelled(true);
-        }
-    }
-
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        final Player player = event.getPlayer();
-        final UUID uuid = player.getUniqueId();
-        if (!joined.contains(uuid)) {
-            joined.add(uuid);
-            onPlayerReady(player);
-        }
-        if (playersOutOfTheGame.contains(uuid)) {
-            leavePlayer(player);
-            return;
         }
     }
 
@@ -948,6 +944,7 @@ public final class Adventure {
     }
 
     public void leavePlayer(Player player) {
+        resetPlayer(player);
         player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
     }
 
@@ -1081,5 +1078,18 @@ public final class Adventure {
         StringBuilder sb = new StringBuilder();
         for (String credit : credits) sb.append(" ").append(credit);
         player.sendMessage(text(buildWorld.getName() + " built by " + sb.toString(), BLUE));
+    }
+
+    public static void resetPlayer(Player player) {
+        player.setGameMode(GameMode.ADVENTURE);
+        player.getInventory().clear();
+        player.setHealth(20);
+        player.setFoodLevel(20);
+        player.setSaturation(20f);
+        player.setFireTicks(0);
+        player.setFreezeTicks(0);
+        for (var pot : player.getActivePotionEffects()) {
+            player.removePotionEffect(pot.getType());
+        }
     }
 }

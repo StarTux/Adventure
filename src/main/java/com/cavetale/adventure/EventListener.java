@@ -81,7 +81,10 @@ public final class EventListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        plugin.applyAdventure(event.getPlayer().getWorld(), adv -> adv.onPlayerJoin(event));
+        plugin.applyAdventure(event.getPlayer().getWorld(), adv -> adv.onPlayerJoin(event.getPlayer()));
+        if (event.getPlayer().getWorld().equals(plugin.getLobbyWorld())) {
+            Adventure.resetPlayer(event.getPlayer());
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
