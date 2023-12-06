@@ -1,5 +1,6 @@
 package com.cavetale.adventure;
 
+import com.cavetale.core.event.hud.PlayerHudEvent;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
@@ -145,5 +146,10 @@ public final class EventListener implements Listener {
     @EventHandler
     protected void onChunkLoad(ChunkLoadEvent event) {
         plugin.applyAdventure(event.getChunk().getWorld(), adv -> adv.onChunkLoad(event));
+    }
+
+    @EventHandler
+    protected void onPlayerHud(PlayerHudEvent event) {
+        plugin.applyAdventure(event.getPlayer().getWorld(), adv -> adv.onPlayerHud(event));
     }
 }

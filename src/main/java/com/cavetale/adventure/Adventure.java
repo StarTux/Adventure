@@ -1,5 +1,7 @@
 package com.cavetale.adventure;
 
+import com.cavetale.core.event.hud.PlayerHudEvent;
+import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.playercache.PlayerCache;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.winthier.creative.BuildWorld;
@@ -18,6 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Value;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
@@ -67,6 +70,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.util.Vector;
 import static com.cavetale.adventure.AdventurePlugin.plugin;
+import static com.cavetale.core.font.Unicode.tiny;
+import static net.kyori.adventure.text.Component.space;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
@@ -89,7 +94,6 @@ public final class Adventure {
     interface Trigger {
         void call(Block block, Player player);
     }
-    static final String SIDEBAR_OBJECTIVE = "Sidebar";
     final List<String> mobList = Arrays.asList(
         "MHF_Blaze",
         "MHF_Bunny",
@@ -152,7 +156,7 @@ public final class Adventure {
     protected final Set<UUID> finished = new HashSet<>();
     protected final Set<UUID> joined = new HashSet<>();
     // score keeping
-    protected Date startTime;
+    protected long startTime;
     // state
     protected final Random random = new Random(System.currentTimeMillis());
     protected long ticks;
@@ -180,7 +184,7 @@ public final class Adventure {
             world.setWeatherDuration(99999);
         }
         processChunkArea(world.getSpawnLocation().getChunk());
-        startTime = new Date();
+        startTime = System.currentTimeMillis();
     }
 
     protected void disable() {
@@ -730,7 +734,7 @@ public final class Adventure {
         player.getInventory().clear();
         final int score = getPlayerScore(player);
         final boolean hasFinished = hasFinished(player.getUniqueId());
-        SQLMapFinish.insert(player.getUniqueId(), buildWorld.getPath(), startTime, new Date(), score, hasFinished);
+        SQLMapFinish.insert(player.getUniqueId(), buildWorld.getPath(), new Date(startTime), new Date(), score, hasFinished);
     }
 
     // Event Handlers
@@ -1091,5 +1095,24 @@ public final class Adventure {
         for (var pot : player.getActivePotionEffects()) {
             player.removePotionEffect(pot.getType());
         }
+    }
+
+    protected void onPlayerHud(PlayerHudEvent event) {
+        final Player player = event.getPlayer();
+        final long millis = System.currentTimeMillis() - startTime;
+        final long seconds = millis / 1000L;
+        final long minutes = seconds / 60L;
+        List<Component> lines = new ArrayList<>();
+        lines.add(textOfChildren(text(tiny("time "), GRAY),
+                                 text(minutes, WHITE),
+                                 text("m", GRAY),
+                                 space(),
+                                 text(seconds % 60L, WHITE),
+                                 text(".", GRAY),
+                                 text(String.format("%03d", millis % 1000L), WHITE),
+                                 text("s", GRAY)));
+        lines.add(textOfChildren(text(tiny("score "), GRAY),
+                                 text(scores.getOrDefault(player.getUniqueId(), 0), WHITE)));
+        event.sidebar(PlayerHudPriority.HIGH, lines);
     }
 }
