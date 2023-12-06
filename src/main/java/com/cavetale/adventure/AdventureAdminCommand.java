@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.bukkit.entity.Player;
 import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.event.ClickEvent.runCommand;
+import static net.kyori.adventure.text.event.HoverEvent.showText;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 
 public final class AdventureAdminCommand extends AbstractCommand<AdventurePlugin> {
@@ -21,6 +23,9 @@ public final class AdventureAdminCommand extends AbstractCommand<AdventurePlugin
             .description("Start a map")
             .completers(CommandArgCompleter.supplyList(this::listMapPaths))
             .playerCaller(this::start);
+        rootNode.addChild("list").denyTabCompletion()
+            .description("List all maps")
+            .playerCaller(this::list);
     }
 
     private List<String> listMapPaths() {
@@ -45,5 +50,13 @@ public final class AdventureAdminCommand extends AbstractCommand<AdventurePlugin
                 adventure.onPlayerJoin(player);
             });
         return true;
+    }
+
+    private void list(Player player) {
+        for (BuildWorld buildWorld : plugin.getBuildWorlds().values()) {
+            player.sendMessage(text(buildWorld.getName(), YELLOW)
+                               .hoverEvent(showText(buildWorld.adminTooltip()))
+                               .clickEvent(runCommand("/advadm start " + buildWorld.getPath())));
+        }
     }
 }
