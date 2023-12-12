@@ -65,6 +65,10 @@ public final class AdventurePlugin extends JavaPlugin {
         }
     }
 
+    public Adventure adventureIn(World world) {
+        return worldAdventureMap.get(world.getName());
+    }
+
     private void tick() {
         for (Adventure adv : List.copyOf(worldAdventureMap.values())) {
             if (adv.obsolete) {
