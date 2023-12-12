@@ -336,7 +336,7 @@ public final class Adventure {
                 final SpawnMob spawnMob = switch (owner) {
                 case "MHF_Skeleton" -> new SpawnMob("skeleton", "{HandItems:[{id:bow,Count:1},{}]}");
                 case "MHF_WSkeleton" -> new SpawnMob("wither_skeleton", "{HandItems:[{id:stone_sword,Count:1},{}]}");
-                case "MHF_PigZombie" -> new SpawnMob("zombie_pigman", "{HandItems:[{id:golden_sword,Count:1},{}]}");
+                case "MHF_PigZombie" -> new SpawnMob("piglin", "{HandItems:[{id:golden_sword,Count:1},{}]}");
                 case "MHF_Golem" -> new SpawnMob("villager_golem", "{}");
                 case "MHF_KillerRabbit" -> new SpawnMob("rabbit", "{RabbitType:99}");
                 case "MHF_Bunny" -> new SpawnMob("rabbit", "{}");
@@ -616,6 +616,7 @@ public final class Adventure {
             Player player = isNearAnyPlayer(block);
             if (player == null) continue;
             final SpawnMob spawnMob = spawnMobs.get(block);
+            removeBlocks.add(block);
             String command = String.format("minecraft:execute at %s run summon %s %d %d %d %s",
                                            player.getUniqueId(),
                                            spawnMob.getId(),
@@ -635,7 +636,6 @@ public final class Adventure {
                 spawnedMob.setCanPickupItems(false);
                 plugin().getLogger().info("Mob spawned: " + spawnedMob.getType() + " " + spawnMob.getId() + " " + spawnMob.getTagData());
                 spawnedMob = null;
-                removeBlocks.add(block);
             } else {
                 plugin().getLogger().warning("Mob did not spawn: " + spawnMob.getId() + " " + spawnMob.getTagData());
             }
