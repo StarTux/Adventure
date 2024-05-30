@@ -1,7 +1,7 @@
 package com.cavetale.adventure;
 
-import com.winthier.sql.SQLRow.NotNull;
 import com.winthier.sql.SQLRow;
+import com.winthier.sql.SQLRow.NotNull;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
