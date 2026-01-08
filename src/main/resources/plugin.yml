@@ -3,7 +3,7 @@ main: com.cavetale.adventure.AdventurePlugin
 name: Adventure
 version: 0.1-SNAPSHOT
 description: Adventure Map Engins
-api-version: '1.21.10'
+api-version: '1.21.11'
 
 author: StarTux
 website: https://github.com/StarTux/Adventure
